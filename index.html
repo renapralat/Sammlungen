@@ -7,11 +7,14 @@
   <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
   <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', system-ui, sans-serif; }
     input::placeholder { color: rgba(255,255,255,0.4); }
-    input[type="text"]:focus { outline: 2px solid rgba(139,92,246,0.6); outline-offset: 1px; }
+    input[type="text"]:focus,
+    input[type="email"]:focus,
+    input[type="password"]:focus { outline: 2px solid rgba(139,92,246,0.6); outline-offset: 1px; }
   </style>
 </head>
 <body>
@@ -24,30 +27,31 @@
   <script type="text/babel" data-presets="react">
     const { useState, useRef, useEffect } = React;
 
+    // ── Supabase ──────────────────────────────────────────────────────────────
+    const sb = supabase.createClient(
+      "https://csyqtynnvoggydofgaua.supabase.co",
+      "sb_publishable_2meBoS5JXmGgJt9MAKq02g_cOWhgSqf"
+    );
+
     // ── Voice Hook ─────────────────────────────────────────────────────────────
     const useVoice = (onResult) => {
       const recRef = useRef(null);
       const cbRef  = useRef(onResult);
-      const [listening,  setListening]  = useState(false);
-      const [supported,  setSupported]  = useState(false);
-
+      const [listening, setListening] = useState(false);
+      const [supported, setSupported] = useState(false);
       useEffect(() => { cbRef.current = onResult; });
-
       useEffect(() => {
         const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (!SR) return;
         setSupported(true);
         const rec = new SR();
-        rec.lang = "de-DE";
-        rec.continuous = false;
-        rec.interimResults = false;
+        rec.lang = "de-DE"; rec.continuous = false; rec.interimResults = false;
         rec.onresult = (e) => cbRef.current(e.results[0][0].transcript);
-        rec.onerror  = () => setListening(false);
-        rec.onend    = () => setListening(false);
+        rec.onerror = () => setListening(false);
+        rec.onend = () => setListening(false);
         recRef.current = rec;
         return () => { try { rec.abort(); } catch (_) {} };
       }, []);
-
       const start = () => {
         if (!recRef.current || listening) return;
         try { recRef.current.start(); setListening(true); } catch (_) { setListening(false); }
@@ -59,57 +63,25 @@
       return { listening, supported, start, stop };
     };
 
-    // ── Defaults ──────────────────────────────────────────────────────────────
-    const DEFAULT_CATS = {
-      poesie: { name: "Poesiebilder", icon: "🎨", color: "#a855f7",
-        fields: ["Nummer", "Titel", "Kommentar"] },
-      books:  { name: "Bücher",        icon: "📖", color: "#3b82f6",
-        fields: ["Titel", "ISBN", "Autor", "Kommentar"] },
-      marx:   { name: "Karl-Marx-Allee", icon: "🏪", color: "#f59e0b",
-        fields: ["Hausnummer", "Geschäft", "Ergänzung 1", "Ergänzung 2", "Erinnerungen"] },
-    };
-
+    // ── Constants ──────────────────────────────────────────────────────────────
     const PALETTE = ["#a855f7","#3b82f6","#f59e0b","#10b981","#ef4444","#ec4899","#06b6d4","#6366f1","#f97316","#84cc16"];
-
-    // ── LocalStorage helpers ──────────────────────────────────────────────────
-    const LS_CATS = 'sammlungen_cats';
-    const LS_DATA = 'sammlungen_data';
-
-    const loadCats = () => {
-      try {
-        const s = localStorage.getItem(LS_CATS);
-        return s ? JSON.parse(s) : DEFAULT_CATS;
-      } catch { return DEFAULT_CATS; }
-    };
-
-    const loadData = (cats) => {
-      try {
-        const s = localStorage.getItem(LS_DATA);
-        if (!s) return Object.fromEntries(Object.keys(cats).map(k => [k, []]));
-        const saved = JSON.parse(s);
-        const merged = { ...saved };
-        Object.keys(cats).forEach(k => { if (!merged[k]) merged[k] = []; });
-        return merged;
-      } catch { return Object.fromEntries(Object.keys(cats).map(k => [k, []])); }
-    };
 
     // ── CSV helpers ─────────────────────────────────────────────────────────────
     const parseCSV = (text) => {
       const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter(Boolean);
       const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim());
       return lines.slice(1).map(line => {
-        const cells = [];
-        let inQ = false, cell = "";
+        const cells = []; let inQ = false, cell = "";
         for (let i = 0; i < line.length; i++) {
           const c = line[i];
-          if (c === '"' && !inQ)                          { inQ = true; }
-          else if (c === '"' && inQ && line[i+1] === '"') { cell += '"'; i++; }
-          else if (c === '"' && inQ)                      { inQ = false; }
-          else if (c === "," && !inQ)                     { cells.push(cell); cell = ""; }
-          else                                            { cell += c; }
+          if (c === '"' && !inQ)                           { inQ = true; }
+          else if (c === '"' && inQ && line[i+1] === '"')  { cell += '"'; i++; }
+          else if (c === '"' && inQ)                       { inQ = false; }
+          else if (c === "," && !inQ)                      { cells.push(cell); cell = ""; }
+          else                                             { cell += c; }
         }
         cells.push(cell);
-        const row = { id: Date.now() + Math.random() };
+        const row = {};
         headers.forEach((h, i) => { row[h] = cells[i] || ""; });
         return row;
       });
@@ -121,60 +93,148 @@
       return "﻿" + [header, ...body].join("\n");
     };
 
+    // ── Print ("Briefform") ───────────────────────────────────────────────────
+    const printCollection = (cat, fields, rows) => {
+      const date = new Date().toLocaleDateString("de-DE", { day:"2-digit", month:"long", year:"numeric" });
+      const win = window.open("", "_blank");
+      win.document.write(`<!DOCTYPE html><html lang="de"><head>
+        <meta charset="UTF-8">
+        <title>${cat.icon} ${cat.name}</title>
+        <style>
+          body { font-family: 'Segoe UI', Georgia, serif; max-width: 680px; margin: 40px auto; color: #1e293b; font-size: 14px; line-height: 1.6; }
+          h1 { font-size: 22px; margin-bottom: 4px; }
+          .meta { color: #64748b; font-size: 12px; border-bottom: 1px solid #cbd5e1; padding-bottom: 10px; margin-bottom: 20px; }
+          .entry { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dotted #e2e8f0; }
+          .entry:last-child { border-bottom: none; }
+          .nr { color: #94a3b8; font-size: 11px; margin-bottom: 2px; }
+          .fields { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+          .label { color: #64748b; font-size: 12px; }
+          .value { font-weight: 500; }
+          @media print { body { margin: 20px; } }
+        </style>
+      </head><body>
+        <h1>${cat.icon} ${cat.name}</h1>
+        <div class="meta">${rows.length} Einträge &nbsp;·&nbsp; Stand: ${date}</div>
+        ${rows.map((row, i) => `
+          <div class="entry">
+            <div class="nr">${i + 1}.</div>
+            <div class="fields">
+              ${fields.map(f => `
+                <div><span class="label">${f}: </span><span class="value">${row[f] || "—"}</span></div>
+              `).join("")}
+            </div>
+          </div>`).join("")}
+      </body></html>`);
+      win.document.close();
+      setTimeout(() => win.print(), 400);
+    };
+
     // ── Styles ──────────────────────────────────────────────────────────────
-    const BG = { minHeight: "100vh", background: "linear-gradient(135deg,#1e293b 0%,#581c87 50%,#1e293b 100%)", color: "white", padding: "0.5rem" };
-    const inp = (extra) => ({ padding:"0.4rem 0.6rem", borderRadius:"6px", border:"1px solid rgba(255,255,255,0.2)", background:"rgba(0,0,0,0.3)", color:"white", fontSize:"0.9rem", ...extra });
-    const btn = (bg, extra) => ({ padding:"0.45rem 0.9rem", border:"none", borderRadius:"8px", background: bg||"rgba(255,255,255,0.1)", color:"white", cursor:"pointer", fontSize:"0.85rem", fontWeight:"600", ...extra });
+    const BG  = { minHeight:"100vh", background:"linear-gradient(135deg,#1e293b 0%,#581c87 50%,#1e293b 100%)", color:"white", padding:"0.5rem" };
+    const inp = (x) => ({ padding:"0.4rem 0.6rem", borderRadius:"6px", border:"1px solid rgba(255,255,255,0.2)", background:"rgba(0,0,0,0.3)", color:"white", fontSize:"0.9rem", ...x });
+    const btn = (bg, x) => ({ padding:"0.45rem 0.9rem", border:"none", borderRadius:"8px", background:bg||"rgba(255,255,255,0.1)", color:"white", cursor:"pointer", fontSize:"0.85rem", fontWeight:"600", ...x });
 
-    // ── App ───────────────────────────────────────────────────────────────
-    function VollactionV2() {
-      const [cats,        setCats]        = useState(loadCats);
-      const [data,        setData]        = useState(() => loadData(loadCats()));
-      const [active,      setActive]      = useState(null);
-      const [sortCol,     setSortCol]     = useState(null);
-      const [sortDir,     setSortDir]     = useState("asc");
-      const [filter,      setFilter]      = useState("");
-      const [msg,         setMsg]         = useState("");
-      const [addCatOpen,  setAddCatOpen]  = useState(false);
-      const [newName,     setNewName]     = useState("");
-      const [newIcon,     setNewIcon]     = useState("📁");
-      const [newColor,    setNewColor]    = useState(PALETTE[3]);
-      const [newFields,   setNewFields]   = useState("");
+    // ── Login Screen ─────────────────────────────────────────────────────────────
+    function LoginScreen() {
+      const [email,    setEmail]    = useState("");
+      const [password, setPassword] = useState("");
+      const [error,    setError]    = useState("");
+      const [loading,  setLoading]  = useState(false);
+
+      const login = async (e) => {
+        e.preventDefault();
+        setLoading(true); setError("");
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) { setError("E-Mail oder Passwort falsch"); setLoading(false); }
+      };
+
+      return (
+        <div style={{ ...BG, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <div style={{ width:"100%", maxWidth:360, background:"rgba(0,0,0,0.45)", borderRadius:"16px", padding:"2rem" }}>
+            <h1 style={{ fontSize:"1.8rem", marginBottom:"0.25rem",
+              background:"linear-gradient(135deg,#fbbf24,#f472b6)",
+              WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>
+              📚 Sammlungen
+            </h1>
+            <p style={{ fontSize:"0.8rem", color:"rgba(255,255,255,0.4)", marginBottom:"1.5rem" }}>
+              Bitte einloggen
+            </p>
+            <form onSubmit={login} style={{ display:"flex", flexDirection:"column", gap:"0.75rem" }}>
+              <input type="email" placeholder="E-Mail" value={email}
+                onChange={e => setEmail(e.target.value)} required
+                style={inp({ width:"100%" })} />
+              <input type="password" placeholder="Passwort" value={password}
+                onChange={e => setPassword(e.target.value)} required
+                style={inp({ width:"100%" })} />
+              {error && <p style={{ fontSize:"0.8rem", color:"#fca5a5" }}>{error}</p>}
+              <button type="submit" disabled={loading}
+                style={btn("linear-gradient(135deg,#a855f7,#6366f1)", { width:"100%", padding:"0.65rem", opacity:loading?0.7:1 })}>
+                {loading ? "…" : "Einloggen"}
+              </button>
+            </form>
+          </div>
+        </div>
+      );
+    }
+
+    // ── Main App ──────────────────────────────────────────────────────────────
+    function App({ user }) {
+      const [cats,       setCats]       = useState({});
+      const [data,       setData]       = useState({});
+      const [active,     setActive]     = useState(null);
+      const [sortCol,    setSortCol]    = useState(null);
+      const [sortDir,    setSortDir]    = useState("asc");
+      const [filter,     setFilter]     = useState("");
+      const [msg,        setMsg]        = useState("");
+      const [addCatOpen, setAddCatOpen] = useState(false);
+      const [newName,    setNewName]    = useState("");
+      const [newIcon,    setNewIcon]    = useState("📁");
+      const [newColor,   setNewColor]   = useState(PALETTE[3]);
+      const [newFields,  setNewFields]  = useState("");
+      const [loading,    setLoading]    = useState(true);
       const csvRef = useRef(null);
-
-      useEffect(() => {
-        try { localStorage.setItem(LS_CATS, JSON.stringify(cats)); } catch (_) {}
-      }, [cats]);
-
-      useEffect(() => {
-        try { localStorage.setItem(LS_DATA, JSON.stringify(data)); } catch (_) {}
-      }, [data]);
 
       const flash = (m, ms=2200) => { setMsg(m); setTimeout(() => setMsg(""), ms); };
       const voice = useVoice((txt) => setFilter(txt));
 
-      const cat    = active ? cats[active]  : null;
-      const fields = cat    ? cat.fields    : [];
+      const cat    = active ? cats[active] : null;
+      const fields = cat ? cat.fields : [];
       const rows   = active ? (data[active] || []) : [];
 
+      // ── Load ──────────────────────────────────────────────────────────────
+      useEffect(() => {
+        const load = async () => {
+          const { data: catRows }  = await sb.from("categories").select("*").order("created_at");
+          const { data: itemRows } = await sb.from("items").select("*").order("created_at");
+          const catMap = {}, dataMap = {};
+          (catRows || []).forEach(c => {
+            catMap[c.id]  = { name:c.name, icon:c.icon, color:c.color, fields:c.fields };
+            dataMap[c.id] = [];
+          });
+          (itemRows || []).forEach(i => {
+            if (dataMap[i.category_id]) dataMap[i.category_id].push({ id:i.id, ...i.data });
+          });
+          setCats(catMap); setData(dataMap); setLoading(false);
+        };
+        load();
+      }, []);
+
+      // ── Filter + Sort ─────────────────────────────────────────────────────────────
       const visible = (() => {
         let r = rows;
         if (filter.trim()) {
           const terms = filter.toLowerCase().split(" ").filter(Boolean);
-          r = r.filter(item =>
-            terms.some(term => {
-              const starEnd   = term.endsWith("*");
-              const starStart = term.startsWith("*");
-              const core      = term.replace(/^\*|\*$/g, "");
-              return Object.values(item).some(v => {
-                const s     = String(v || "").toLowerCase();
-                const words = s.split(/[\s\-,;.!?()\[\]{}'"]+ /);
-                if (starEnd)   return words.some(w => w.startsWith(core));
-                if (starStart) return words.some(w => w.endsWith(core));
-                return words.includes(core);
-              });
-            })
-          );
+          r = r.filter(item => terms.some(term => {
+            const starEnd = term.endsWith("*"), starStart = term.startsWith("*");
+            const core = term.replace(/^\*|\*$/g, "");
+            return Object.values(item).some(v => {
+              const s = String(v || "").toLowerCase();
+              const words = s.split(/[\s\-,;.!?()\[\]{}'"]+ /);
+              if (starEnd)   return words.some(w => w.startsWith(core));
+              if (starStart) return words.some(w => w.endsWith(core));
+              return words.includes(core);
+            });
+          }));
         }
         if (sortCol) {
           r = [...r].sort((a, b) => {
@@ -187,81 +247,116 @@
       })();
 
       const handleSort = (col) => {
-        if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");
+        if (sortCol === col) setSortDir(d => d==="asc"?"desc":"asc");
         else { setSortCol(col); setSortDir("asc"); }
       };
 
-      const addRow = () => {
-        const row = { id: Date.now(), ...Object.fromEntries(fields.map(f => [f,""])) };
-        setData(prev => ({ ...prev, [active]: [row, ...(prev[active] || [])] }));
+      // ── Row ops ──────────────────────────────────────────────────────────────
+      const addRow = async () => {
+        const emptyData = Object.fromEntries(fields.map(f => [f,""]));
+        const { data: created } = await sb.from("items")
+          .insert([{ category_id:active, user_id:user.id, data:emptyData }])
+          .select();
+        if (!created?.length) return;
+        const newRow = { id:created[0].id, ...emptyData };
+        setData(prev => ({ ...prev, [active]: [newRow, ...(prev[active]||[])] }));
         setSortCol(null);
       };
 
       const cellChange = (id, field, value) =>
         setData(prev => ({
           ...prev,
-          [active]: (prev[active] || []).map(r => r.id === id ? { ...r, [field]: value } : r)
+          [active]: (prev[active]||[]).map(r => r.id===id ? { ...r, [field]:value } : r)
         }));
 
-      const delRow = (id) =>
-        setData(prev => ({ ...prev, [active]: (prev[active] || []).filter(r => r.id !== id) }));
+      const saveCell = async (id, field, value) => {
+        const row = (data[active]||[]).find(r => r.id===id);
+        if (!row) return;
+        const { id:_, ...rowData } = row;
+        await sb.from("items").update({ data:{ ...rowData, [field]:value } }).eq("id", id);
+      };
 
+      const delRow = async (id) => {
+        setData(prev => ({ ...prev, [active]: (prev[active]||[]).filter(r => r.id!==id) }));
+        await sb.from("items").delete().eq("id", id);
+      };
+
+      // ── CSV ──────────────────────────────────────────────────────────────
       const exportCSV = () => {
         if (!rows.length) { flash("⚠ Keine Daten"); return; }
         const blob = new Blob([toCSV(fields, rows)], { type:"text/csv;charset=utf-8;" });
         const a = document.createElement("a");
         a.href = URL.createObjectURL(blob);
-        a.download = `${active}_${new Date().toISOString().slice(0,10)}.csv`;
-        a.click();
-        URL.revokeObjectURL(a.href);
+        a.download = `${cat.name}_${new Date().toISOString().slice(0,10)}.csv`;
+        a.click(); URL.revokeObjectURL(a.href);
         flash("✓ CSV exportiert");
       };
 
-      const importCSV = (e) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
+      const importCSV = async (e) => {
+        const file = e.target.files?.[0]; if (!file) return;
         const reader = new FileReader();
-        reader.onload = (ev) => {
+        reader.onload = async (ev) => {
           try {
             const newRows = parseCSV(ev.target.result);
-            setData(prev => ({ ...prev, [active]: [...(prev[active] || []), ...newRows] }));
-            flash(`✓ ${newRows.length} Zeilen importiert`);
+            const toInsert = newRows.map(r => ({ category_id:active, user_id:user.id, data:r }));
+            const { data: created } = await sb.from("items").insert(toInsert).select();
+            const mapped = (created||[]).map(i => ({ id:i.id, ...i.data }));
+            setData(prev => ({ ...prev, [active]: [...(prev[active]||[]), ...mapped] }));
+            flash(`✓ ${mapped.length} Zeilen importiert`);
           } catch { flash("✗ Import-Fehler"); }
         };
         reader.readAsText(file, "UTF-8");
         e.target.value = "";
       };
 
-      const addCategory = () => {
+      // ── Categories ─────────────────────────────────────────────────────────────
+      const addCategory = async () => {
         const name = newName.trim();
         if (!name) { flash("⚠ Name fehlt"); return; }
         const fs = newFields.split(",").map(f => f.trim()).filter(Boolean);
         if (!fs.length) { flash("⚠ Mindestens ein Feld angeben"); return; }
-        const id = name.toLowerCase().replace(/[^a-z0-9]/g,"_") + "_" + Date.now();
-        setCats(prev => ({ ...prev, [id]: { name, icon: newIcon, color: newColor, fields: fs } }));
-        setData(prev => ({ ...prev, [id]: [] }));
+        const { data: created } = await sb.from("categories")
+          .insert([{ user_id:user.id, name, icon:newIcon, color:newColor, fields:fs }])
+          .select();
+        if (!created?.length) return;
+        const id = created[0].id;
+        setCats(prev => ({ ...prev, [id]:{ name, icon:newIcon, color:newColor, fields:fs } }));
+        setData(prev => ({ ...prev, [id]:[] }));
         setNewName(""); setNewIcon("📁"); setNewFields(""); setNewColor(PALETTE[3]);
-        setAddCatOpen(false);
-        flash("✓ Kategorie erstellt");
+        setAddCatOpen(false); flash("✓ Kategorie erstellt");
       };
 
-      const delCategory = (id) => {
+      const delCategory = async (id) => {
         if (!window.confirm(`Kategorie "${cats[id].name}" wirklich löschen? Alle Daten gehen verloren.`)) return;
+        await sb.from("categories").delete().eq("id", id);
         setCats(prev => { const n={...prev}; delete n[id]; return n; });
         setData(prev => { const n={...prev}; delete n[id]; return n; });
-        if (active === id) setActive(null);
+        if (active===id) setActive(null);
       };
 
+      if (loading) return (
+        <div style={{ ...BG, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          Lade Daten…
+        </div>
+      );
+
+      // ════ CATEGORY LIST ════════════════════════════════════════════════════
       if (!active) return (
         <div style={BG}>
           <div style={{ maxWidth:480, margin:"0 auto", paddingTop:"2.5rem" }}>
-            <h1 style={{ fontSize:"2rem", marginBottom:"0.25rem",
-              background:"linear-gradient(135deg,#fbbf24,#f472b6)",
-              WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>
-              📚 Sammlungen
-            </h1>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"0.25rem" }}>
+              <h1 style={{ fontSize:"2rem",
+                background:"linear-gradient(135deg,#fbbf24,#f472b6)",
+                WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>
+                📚 Sammlungen
+              </h1>
+              <button onClick={() => sb.auth.signOut()}
+                style={btn("rgba(239,68,68,0.2)", { fontSize:"0.75rem", padding:"0.3rem 0.6rem" })}>
+                ⎋ Logout
+              </button>
+            </div>
             <p style={{ fontSize:"0.75rem", color:"rgba(255,255,255,0.4)", marginBottom:"1.5rem" }}>
-              Vollaction V2 · Voice Edition
+              {user.email}
             </p>
 
             {Object.entries(cats).map(([id, c]) => (
@@ -276,7 +371,7 @@
                   </span>
                 </button>
                 <button onClick={() => delCategory(id)}
-                  style={{ ...btn("rgba(239,68,68,0.2)"), padding:"0.5rem 0.7rem", fontSize:"1rem" }}
+                  style={{ ...btn("rgba(239,68,68,0.2)"), padding:"0.5rem 0.7rem" }}
                   title="Kategorie löschen">🗑</button>
               </div>
             ))}
@@ -297,7 +392,6 @@
                 <input value={newFields} onChange={e => setNewFields(e.target.value)}
                   placeholder="Felder (kommagetrennt): Feld1, Feld2, Feld3"
                   style={inp({ width:"100%", marginBottom:"0.5rem" })} />
-
                 <div style={{ display:"flex", gap:"6px", marginBottom:"0.75rem", flexWrap:"wrap" }}>
                   {PALETTE.map(c => (
                     <div key={c} onClick={() => setNewColor(c)} style={{
@@ -307,10 +401,8 @@
                     }} />
                   ))}
                 </div>
-
                 <div style={{ display:"flex", gap:"0.5rem" }}>
-                  <button onClick={addCategory}
-                    style={btn("linear-gradient(135deg,#10b981,#059669)")}>Erstellen</button>
+                  <button onClick={addCategory} style={btn("linear-gradient(135deg,#10b981,#059669)")}>Erstellen</button>
                   <button onClick={() => setAddCatOpen(false)} style={btn()}>Abbrechen</button>
                 </div>
               </div>
@@ -322,9 +414,10 @@
         </div>
       );
 
+      // ════ COLLECTION VIEW ════════════════════════════════════════════════════
       return (
         <div style={BG}>
-          <div style={{ maxWidth:1600, margin:"0 auto" }}>
+          <div style={{ maxWidth:1600, margin:"0 auto", paddingBottom:"5rem" }}>
 
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
               marginBottom:"0.75rem", flexWrap:"wrap", gap:"0.5rem" }}>
@@ -340,14 +433,13 @@
                   color: msg.startsWith("✓") ? "#86efac" : "#fca5a5" }}>{msg}</span>}
               </div>
               <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap" }}>
-                <button onClick={addRow}
-                  style={btn("linear-gradient(135deg,#10b981,#059669)")}>＋ Zeile</button>
+                <button onClick={() => printCollection(cat, fields, rows)}
+                  style={btn("linear-gradient(135deg,#f59e0b,#d97706)")}>🖨 Drucken</button>
                 <button onClick={exportCSV}
                   style={btn("linear-gradient(135deg,#3b82f6,#06b6d4)")}>⬇ CSV</button>
                 <button onClick={() => csvRef.current?.click()}
                   style={btn("linear-gradient(135deg,#6366f1,#8b5cf6)")}>⬆ CSV</button>
-                <input ref={csvRef} type="file" accept=".csv" onChange={importCSV}
-                  style={{ display:"none" }} />
+                <input ref={csvRef} type="file" accept=".csv" onChange={importCSV} style={{ display:"none" }} />
               </div>
             </div>
 
@@ -359,21 +451,16 @@
                 style={inp({ flex:1, maxWidth:400 })}
               />
               {voice.supported && (
-                <button
-                  onClick={() => voice.listening ? voice.stop() : voice.start()}
+                <button onClick={() => voice.listening ? voice.stop() : voice.start()}
                   title={voice.listening ? "Aufnahme stoppen" : "Spracheingabe (Deutsch)"}
                   style={btn(
-                    voice.listening
-                      ? "linear-gradient(135deg,#ef4444,#dc2626)"
-                      : "linear-gradient(135deg,#6366f1,#8b5cf6)",
+                    voice.listening ? "linear-gradient(135deg,#ef4444,#dc2626)" : "linear-gradient(135deg,#6366f1,#8b5cf6)",
                     { minWidth:44, minHeight:40, fontSize:"1.1rem" }
                   )}>
                   {voice.listening ? "⏹️" : "🍤"}
                 </button>
               )}
-              {filter && (
-                <button onClick={() => setFilter("")} style={btn()}>✕</button>
-              )}
+              {filter && <button onClick={() => setFilter("")} style={btn()}>✕</button>}
               <span style={{ fontSize:"0.75rem", color:"rgba(255,255,255,0.45)", marginLeft:"0.25rem" }}>
                 {visible.length} / {rows.length}
               </span>
@@ -408,6 +495,7 @@
                           <input
                             value={item[f] || ""}
                             onChange={e => cellChange(item.id, f, e.target.value)}
+                            onBlur={e => saveCell(item.id, f, e.target.value)}
                             style={inp({ width:"100%", minWidth:70, padding:"0.35rem 0.45rem" })}
                           />
                         </td>
@@ -424,21 +512,58 @@
                     <tr>
                       <td colSpan={fields.length+1} style={{
                         padding:"2.5rem", textAlign:"center", color:"rgba(255,255,255,0.35)" }}>
-                        {filter ? "Keine Treffer für diese Suche" : "Noch leer – ＋ Zeile drücken"}
+                        {filter ? "Keine Treffer für diese Suche" : "Noch leer – ＋ unten rechts drücken"}
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
-
           </div>
+
+          <button
+            onClick={addRow}
+            title="Neue Zeile hinzufügen"
+            style={{
+              position:"fixed", bottom:"1.5rem", right:"1.5rem",
+              width:58, height:58, borderRadius:"50%", border:"none",
+              background:"linear-gradient(135deg,#10b981,#059669)",
+              color:"white", fontSize:"2rem", cursor:"pointer",
+              boxShadow:"0 4px 24px rgba(0,0,0,0.5)",
+              display:"flex", alignItems:"center", justifyContent:"center",
+              zIndex:100
+            }}>＋</button>
         </div>
       );
     }
 
+    // ── Root (Auth wrapper) ───────────────────────────────────────────────────────
+    function Root() {
+      const [user,     setUser]     = useState(null);
+      const [checking, setChecking] = useState(true);
+
+      useEffect(() => {
+        sb.auth.getSession().then(({ data }) => {
+          setUser(data.session?.user || null);
+          setChecking(false);
+        });
+        const { data: { subscription } } = sb.auth.onAuthStateChange((_, session) => {
+          setUser(session?.user || null);
+        });
+        return () => subscription.unsubscribe();
+      }, []);
+
+      if (checking) return (
+        <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#1e293b 0%,#581c87 50%,#1e293b 100%)",
+          display:"flex", alignItems:"center", justifyContent:"center", color:"white" }}>
+          …
+        </div>
+      );
+      return user ? <App user={user} /> : <LoginScreen />;
+    }
+
     const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<VollactionV2 />);
+    root.render(<Root />);
   </script>
 </body>
 </html>
