@@ -263,6 +263,9 @@
       const [newFields,    setNewFields]    = useState("");
       const [loading,      setLoading]      = useState(true);
       const [expandedImgs, setExpandedImgs] = useState(new Set());
+      const [editingCat,   setEditingCat]   = useState(null);
+      const [editName,     setEditName]     = useState("");
+      const [editIcon,     setEditIcon]     = useState("");
       const csvRef = useRef(null);
 
       const flash = (m, ms=2200) => { setMsg(m); setTimeout(() => setMsg(""), ms); };
@@ -467,6 +470,22 @@
         if (active===id) setActive(null);
       };
 
+      const startEdit = (id) => {
+        setEditingCat(id);
+        setEditName(cats[id].name);
+        setEditIcon(cats[id].icon);
+      };
+
+      const saveCategory = async (id) => {
+        const name = editName.trim();
+        if (!name) return;
+        const icon = editIcon.trim() || cats[id].icon;
+        await sb.from("categories").update({ name, icon }).eq("id", id);
+        setCats(prev => ({ ...prev, [id]: { ...prev[id], name, icon } }));
+        setEditingCat(null);
+        flash("✓ Kategorie gespeichert");
+      };
+
       const goBack = () => { setActive(null); setFilter(""); setSortCol(null); setExpandedImgs(new Set()); };
 
       if (loading) return (
@@ -493,19 +512,39 @@
             <p style={{ fontSize:"0.75rem", color:"rgba(255,255,255,0.4)", marginBottom:"1.5rem" }}>{user.email}</p>
 
             {Object.entries(cats).map(([id, c]) => (
-              <div key={id} style={{ display:"flex", gap:"0.5rem", marginBottom:"0.6rem" }}>
-                <button onClick={() => setActive(id)} style={{
-                  ...btn(null), flex:1, padding:"1.1rem", fontSize:"1.05rem", textAlign:"left",
-                  background:`linear-gradient(135deg, ${c.color}, ${c.color}99)`
-                }}>
-                  {c.icon} {c.name}
-                  <span style={{ float:"right", fontSize:"0.75rem", opacity:0.6 }}>
-                    {data[id]?.length || 0} Einträge
-                  </span>
-                </button>
-                <button onClick={() => delCategory(id)}
-                  style={{ ...btn("rgba(239,68,68,0.2)"), padding:"0.5rem 0.7rem" }}
-                  title="Kategorie löschen">🗑</button>
+              <div key={id} style={{ marginBottom:"0.6rem" }}>
+                {editingCat === id ? (
+                  <div style={{ background:"rgba(0,0,0,0.45)", borderRadius:"12px", padding:"0.75rem" }}>
+                    <div style={{ display:"flex", gap:"0.5rem", marginBottom:"0.5rem" }}>
+                      <input value={editIcon} onChange={e => setEditIcon(e.target.value)}
+                        style={inp({ width:52, textAlign:"center", fontSize:"1.3rem" })} />
+                      <input value={editName} onChange={e => setEditName(e.target.value)}
+                        style={inp({ flex:1 })} />
+                    </div>
+                    <div style={{ display:"flex", gap:"0.5rem" }}>
+                      <button onClick={() => saveCategory(id)} style={btn("linear-gradient(135deg,#10b981,#059669)")}>Speichern</button>
+                      <button onClick={() => setEditingCat(null)} style={btn()}>Abbrechen</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display:"flex", gap:"0.5rem" }}>
+                    <button onClick={() => setActive(id)} style={{
+                      ...btn(null), flex:1, padding:"1.1rem", fontSize:"1.05rem", textAlign:"left",
+                      background:`linear-gradient(135deg, ${c.color}, ${c.color}99)`
+                    }}>
+                      {c.icon} {c.name}
+                      <span style={{ float:"right", fontSize:"0.75rem", opacity:0.6 }}>
+                        {data[id]?.length || 0} Einträge
+                      </span>
+                    </button>
+                    <button onClick={() => startEdit(id)}
+                      style={{ ...btn("rgba(255,255,255,0.1)"), padding:"0.5rem 0.7rem" }}
+                      title="Umbenennen">✏️</button>
+                    <button onClick={() => delCategory(id)}
+                      style={{ ...btn("rgba(239,68,68,0.2)"), padding:"0.5rem 0.7rem" }}
+                      title="Kategorie löschen">🗑</button>
+                  </div>
+                )}
               </div>
             ))}
 
