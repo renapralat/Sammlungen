@@ -99,43 +99,50 @@
       return "﻿" + [header, ...body].join("\n");
     };
 
-    // ── Print ("Briefform") ───────────────────────────────────────────────────
+    // ── Print (Tabellenform mit Bildern rechts) ───────────────────────────────
     const printCollection = (cat, fields, rows, getImgUrl) => {
       const date = new Date().toLocaleDateString("de-DE", { day:"2-digit", month:"long", year:"numeric" });
+      const hasImages = rows.some(r => r.__img1 || r.__img2);
       const win = window.open("", "_blank");
       win.document.write(`<!DOCTYPE html><html lang="de"><head>
         <meta charset="UTF-8">
         <title>${cat.icon} ${cat.name}</title>
         <style>
-          body { font-family: 'Segoe UI', Georgia, serif; max-width: 680px; margin: 40px auto; color: #1e293b; font-size: 14px; line-height: 1.6; }
-          h1 { font-size: 22px; margin-bottom: 4px; }
-          .meta { color: #64748b; font-size: 12px; border-bottom: 1px solid #cbd5e1; padding-bottom: 10px; margin-bottom: 20px; }
-          .entry { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px dotted #e2e8f0; }
-          .entry:last-child { border-bottom: none; }
-          .nr { color: #94a3b8; font-size: 11px; margin-bottom: 4px; }
-          .fields { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-bottom: 8px; }
-          .label { color: #64748b; font-size: 12px; }
-          .value { font-weight: 500; }
-          .imgs { display: flex; gap: 8px; margin-top: 6px; }
-          .imgs img { width: 100px; height: 75px; object-fit: cover; border-radius: 4px; border: 1px solid #e2e8f0; }
-          .img-label { font-size: 10px; color: #94a3b8; text-align: center; margin-top: 2px; }
-          @media print { body { margin: 20px; } }
+          body { font-family: 'Segoe UI', Arial, sans-serif; margin: 20px; color: #1e293b; font-size: 12px; }
+          h1 { font-size: 18px; margin-bottom: 2px; }
+          .meta { color: #64748b; font-size: 11px; border-bottom: 2px solid #334155; padding-bottom: 6px; margin-bottom: 10px; }
+          table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+          th { background: #334155; color: white; padding: 6px 8px; text-align: left; font-size: 11px; font-weight: 700; }
+          td { padding: 5px 8px; border-bottom: 1px solid #e2e8f0; vertical-align: top; word-break: break-word; }
+          tr:nth-child(even) td { background: #f8fafc; }
+          .col-first { white-space: nowrap; font-weight: 600; width: auto; }
+          .col-img { width: 130px; text-align: center; }
+          .img-wrap { display: flex; gap: 4px; justify-content: center; }
+          .img-wrap img { width: 56px; height: 42px; object-fit: cover; border-radius: 3px; border: 1px solid #cbd5e1; }
+          .img-label { font-size: 9px; color: #94a3b8; text-align: center; }
+          @media print { body { margin: 10px; } }
         </style>
       </head><body>
         <h1>${cat.icon} ${cat.name}</h1>
         <div class="meta">${rows.length} Einträge &nbsp;·&nbsp; Stand: ${date}</div>
-        ${rows.map((row, i) => `
-          <div class="entry">
-            <div class="nr">${i + 1}.</div>
-            <div class="fields">
-              ${fields.map(f => `<div><span class="label">${f}: </span><span class="value">${row[f] || "—"}</span></div>`).join("")}
-            </div>
-            ${(row.__img1 || row.__img2) ? `
-              <div class="imgs">
-                ${row.__img1 ? `<div><img src="${getImgUrl(row.__img1)}" /><div class="img-label">Bild 1</div></div>` : ""}
-                ${row.__img2 ? `<div><img src="${getImgUrl(row.__img2)}" /><div class="img-label">Bild 2</div></div>` : ""}
-              </div>` : ""}
-          </div>`).join("")}
+        <table>
+          <thead><tr>
+            ${fields.map((f, i) => `<th class="${i===0?'col-first':''}">${f}</th>`).join("")}
+            ${hasImages ? `<th class="col-img">Bilder</th>` : ""}
+          </tr></thead>
+          <tbody>
+            ${rows.map(row => `<tr>
+              ${fields.map((f, i) => `<td class="${i===0?'col-first':''}">${row[f] || "—"}</td>`).join("")}
+              ${hasImages ? `<td class="col-img">
+                ${(row.__img1 || row.__img2) ? `
+                  <div class="img-wrap">
+                    ${row.__img1 ? `<div><img src="${getImgUrl(row.__img1)}" /><div class="img-label">Bild 1</div></div>` : ""}
+                    ${row.__img2 ? `<div><img src="${getImgUrl(row.__img2)}" /><div class="img-label">Bild 2</div></div>` : ""}
+                  </div>` : ""}
+              </td>` : ""}
+            </tr>`).join("")}
+          </tbody>
+        </table>
       </body></html>`);
       win.document.close();
       setTimeout(() => win.print(), 400);
@@ -296,13 +303,21 @@
       });
 
       const uploadImage = async (itemId, slot, file) => {
-        const ext = file.name.split(".").pop().toLowerCase() || "jpg";
-        const path = `${user.id}/${itemId}/img${slot}.${ext}`;
-        const { error } = await sb.storage.from(BUCKET).upload(path, file, { upsert:true });
-        if (error) { flash("✗ Bild-Upload fehlgeschlagen"); return; }
         const key = `__img${slot}`;
         const row = (data[active]||[]).find(r => r.id===itemId);
         if (!row) return;
+
+        // Delete old file first (avoids browser-cache showing stale image)
+        if (row[key]) {
+          await sb.storage.from(BUCKET).remove([row[key]]);
+        }
+
+        // Unique filename per upload so browser never serves a cached old version
+        const ext = file.name.split(".").pop().toLowerCase() || "jpg";
+        const path = `${user.id}/${itemId}/img${slot}_${Date.now()}.${ext}`;
+        const { error } = await sb.storage.from(BUCKET).upload(path, file);
+        if (error) { flash("✗ Bild-Upload fehlgeschlagen"); return; }
+
         const { id:_, ...rowData } = row;
         await sb.from("items").update({ data:{ ...rowData, [key]:path } }).eq("id", itemId);
         setData(prev => ({
