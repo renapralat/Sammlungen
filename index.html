@@ -262,6 +262,8 @@
       const [newColor,     setNewColor]     = useState(PALETTE[3]);
       const [newFields,    setNewFields]    = useState("");
       const [loading,      setLoading]      = useState(true);
+      const [loadError,    setLoadError]    = useState(false);
+      const [retryCount,   setRetryCount]   = useState(0);
       const [expandedImgs, setExpandedImgs] = useState(new Set());
       const [editingCat,   setEditingCat]   = useState(null);
       const [editName,     setEditName]     = useState("");
@@ -277,21 +279,26 @@
 
       // ── Load ────────────────────────────────────────────────────────────────
       useEffect(() => {
+        setLoading(true); setLoadError(false);
         const load = async () => {
-          const { data: catRows }  = await sb.from("categories").select("*").order("created_at");
-          const { data: itemRows } = await sb.from("items").select("*").order("created_at");
-          const catMap = {}, dataMap = {};
-          (catRows || []).forEach(c => {
-            catMap[c.id]  = { name:c.name, icon:c.icon, color:c.color, fields:c.fields };
-            dataMap[c.id] = [];
-          });
-          (itemRows || []).forEach(i => {
-            if (dataMap[i.category_id]) dataMap[i.category_id].push({ id:i.id, ...i.data });
-          });
-          setCats(catMap); setData(dataMap); setLoading(false);
+          const timer = setTimeout(() => { setLoading(false); setLoadError(true); }, 12000);
+          try {
+            const { data: catRows }  = await sb.from("categories").select("*").order("created_at");
+            const { data: itemRows } = await sb.from("items").select("*").order("created_at");
+            clearTimeout(timer);
+            const catMap = {}, dataMap = {};
+            (catRows || []).forEach(c => {
+              catMap[c.id]  = { name:c.name, icon:c.icon, color:c.color, fields:c.fields };
+              dataMap[c.id] = [];
+            });
+            (itemRows || []).forEach(i => {
+              if (dataMap[i.category_id]) dataMap[i.category_id].push({ id:i.id, ...i.data });
+            });
+            setCats(catMap); setData(dataMap); setLoading(false);
+          } catch(_) { clearTimeout(timer); setLoading(false); setLoadError(true); }
         };
         load();
-      }, []);
+      }, [retryCount]);
 
       // ── Image helpers ───────────────────────────────────────────────────────
       const getImgUrl = useCallback((path) => {
@@ -489,8 +496,26 @@
       const goBack = () => { setActive(null); setFilter(""); setSortCol(null); setExpandedImgs(new Set()); };
 
       if (loading) return (
-        <div style={{ ...BG, display:"flex", alignItems:"center", justifyContent:"center" }}>
-          Lade Daten…
+        <div style={{ ...BG, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"0.75rem" }}>
+          <div style={{ fontSize:"1.1rem" }}>Lade Daten…</div>
+          <div style={{ fontSize:"0.75rem", color:"rgba(255,255,255,0.4)" }}>Beim ersten Aufruf kann es 10–20 Sek. dauern.</div>
+        </div>
+      );
+
+      if (loadError) return (
+        <div style={{ ...BG, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"1rem", textAlign:"center", padding:"2rem" }}>
+          <div style={{ fontSize:"2rem" }}>⚠️</div>
+          <div style={{ fontSize:"1rem" }}>Verbindung fehlgeschlagen</div>
+          <div style={{ fontSize:"0.8rem", color:"rgba(255,255,255,0.5)", maxWidth:320 }}>
+            Der Server antwortet nicht. Bitte kurz warten und erneut versuchen.
+          </div>
+          <button onClick={() => setRetryCount(c => c+1)}
+            style={btn("linear-gradient(135deg,#a855f7,#6366f1)", { padding:"0.65rem 1.5rem", fontSize:"1rem" })}>
+            🔄 Erneut versuchen
+          </button>
+          <button onClick={() => sb.auth.signOut()} style={btn("rgba(255,255,255,0.1)", { fontSize:"0.8rem" })}>
+            Ausloggen
+          </button>
         </div>
       );
 
