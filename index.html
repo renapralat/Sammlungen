@@ -136,9 +136,11 @@
 
     // ── Login Screen ──────────────────────────────────────────────────────────
     function LoginScreen() {
+      const [tab,      setTab]      = useState("login");
       const [email,    setEmail]    = useState("");
       const [password, setPassword] = useState("");
       const [error,    setError]    = useState("");
+      const [success,  setSuccess]  = useState("");
       const [loading,  setLoading]  = useState(false);
 
       const login = async (e) => {
@@ -148,28 +150,45 @@
         if (error) { setError("E-Mail oder Passwort falsch"); setLoading(false); }
       };
 
+      const register = async (e) => {
+        e.preventDefault();
+        setLoading(true); setError("");
+        const { error } = await sb.auth.signUp({ email, password });
+        if (error) { setError(error.message); setLoading(false); }
+        else { setSuccess("✓ Account erstellt – du kannst dich jetzt einloggen!"); setTab("login"); setLoading(false); }
+      };
+
+      const tabStyle = (active) => ({
+        flex:1, padding:"0.5rem", border:"none", cursor:"pointer", fontWeight:"600", fontSize:"0.85rem",
+        background: active ? "rgba(139,92,246,0.4)" : "transparent",
+        color: active ? "white" : "rgba(255,255,255,0.5)",
+        borderBottom: active ? "2px solid #a855f7" : "2px solid transparent"
+      });
+
       return (
         <div style={{ ...BG, display:"flex", alignItems:"center", justifyContent:"center" }}>
           <div style={{ width:"100%", maxWidth:360, background:"rgba(0,0,0,0.45)", borderRadius:"16px", padding:"2rem" }}>
-            <h1 style={{ fontSize:"1.8rem", marginBottom:"0.25rem",
+            <h1 style={{ fontSize:"1.8rem", marginBottom:"1.25rem",
               background:"linear-gradient(135deg,#fbbf24,#f472b6)",
               WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>
               📚 Sammlungen
             </h1>
-            <p style={{ fontSize:"0.8rem", color:"rgba(255,255,255,0.4)", marginBottom:"1.5rem" }}>
-              Bitte einloggen
-            </p>
-            <form onSubmit={login} style={{ display:"flex", flexDirection:"column", gap:"0.75rem" }}>
+            <div style={{ display:"flex", marginBottom:"1.25rem", borderBottom:"1px solid rgba(255,255,255,0.15)" }}>
+              <button style={tabStyle(tab==="login")}  onClick={() => { setTab("login");    setError(""); setSuccess(""); }}>Einloggen</button>
+              <button style={tabStyle(tab==="signup")} onClick={() => { setTab("signup");   setError(""); setSuccess(""); }}>Registrieren</button>
+            </div>
+            {success && <p style={{ fontSize:"0.8rem", color:"#86efac", marginBottom:"0.75rem" }}>{success}</p>}
+            <form onSubmit={tab==="login" ? login : register} style={{ display:"flex", flexDirection:"column", gap:"0.75rem" }}>
               <input type="email" placeholder="E-Mail" value={email}
                 onChange={e => setEmail(e.target.value)} required
                 style={inp({ width:"100%" })} />
-              <input type="password" placeholder="Passwort" value={password}
-                onChange={e => setPassword(e.target.value)} required
+              <input type="password" placeholder="Passwort (mind. 6 Zeichen)" value={password}
+                onChange={e => setPassword(e.target.value)} required minLength={6}
                 style={inp({ width:"100%" })} />
               {error && <p style={{ fontSize:"0.8rem", color:"#fca5a5" }}>{error}</p>}
               <button type="submit" disabled={loading}
                 style={btn("linear-gradient(135deg,#a855f7,#6366f1)", { width:"100%", padding:"0.65rem", opacity:loading?0.7:1 })}>
-                {loading ? "…" : "Einloggen"}
+                {loading ? "…" : tab==="login" ? "Einloggen" : "Account erstellen"}
               </button>
             </form>
           </div>
