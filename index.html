@@ -15,6 +15,11 @@
     input[type="text"]:focus,
     input[type="email"]:focus,
     input[type="password"]:focus { outline: 2px solid rgba(139,92,246,0.6); outline-offset: 1px; }
+    .img-thumb { width:72px; height:54px; object-fit:cover; border-radius:6px; cursor:pointer; display:block; }
+    .img-upload-btn { width:72px; height:54px; border-radius:6px; border:2px dashed rgba(139,92,246,0.5);
+      background:rgba(139,92,246,0.15); color:white; cursor:pointer; font-size:1.3rem;
+      display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+    .img-upload-btn:hover { background:rgba(139,92,246,0.3); }
   </style>
 </head>
 <body>
@@ -25,13 +30,14 @@
   </div>
 
   <script type="text/babel" data-presets="react">
-    const { useState, useRef, useEffect } = React;
+    const { useState, useRef, useEffect, useCallback } = React;
 
     // ── Supabase ──────────────────────────────────────────────────────────────
     const sb = supabase.createClient(
       "https://csyqtynnvoggydofgaua.supabase.co",
       "sb_publishable_2meBoS5JXmGgJt9MAKq02g_cOWhgSqf"
     );
+    const BUCKET = "sammlungen-images";
 
     // ── Voice Hook ────────────────────────────────────────────────────────────
     const useVoice = (onResult) => {
@@ -94,7 +100,7 @@
     };
 
     // ── Print ("Briefform") ───────────────────────────────────────────────────
-    const printCollection = (cat, fields, rows) => {
+    const printCollection = (cat, fields, rows, getImgUrl) => {
       const date = new Date().toLocaleDateString("de-DE", { day:"2-digit", month:"long", year:"numeric" });
       const win = window.open("", "_blank");
       win.document.write(`<!DOCTYPE html><html lang="de"><head>
@@ -104,12 +110,15 @@
           body { font-family: 'Segoe UI', Georgia, serif; max-width: 680px; margin: 40px auto; color: #1e293b; font-size: 14px; line-height: 1.6; }
           h1 { font-size: 22px; margin-bottom: 4px; }
           .meta { color: #64748b; font-size: 12px; border-bottom: 1px solid #cbd5e1; padding-bottom: 10px; margin-bottom: 20px; }
-          .entry { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px dotted #e2e8f0; }
+          .entry { margin-bottom: 16px; padding-bottom: 16px; border-bottom: 1px dotted #e2e8f0; }
           .entry:last-child { border-bottom: none; }
-          .nr { color: #94a3b8; font-size: 11px; margin-bottom: 2px; }
-          .fields { display: flex; flex-wrap: wrap; gap: 4px 20px; }
+          .nr { color: #94a3b8; font-size: 11px; margin-bottom: 4px; }
+          .fields { display: flex; flex-wrap: wrap; gap: 4px 20px; margin-bottom: 8px; }
           .label { color: #64748b; font-size: 12px; }
           .value { font-weight: 500; }
+          .imgs { display: flex; gap: 8px; margin-top: 6px; }
+          .imgs img { width: 100px; height: 75px; object-fit: cover; border-radius: 4px; border: 1px solid #e2e8f0; }
+          .img-label { font-size: 10px; color: #94a3b8; text-align: center; margin-top: 2px; }
           @media print { body { margin: 20px; } }
         </style>
       </head><body>
@@ -119,10 +128,13 @@
           <div class="entry">
             <div class="nr">${i + 1}.</div>
             <div class="fields">
-              ${fields.map(f => `
-                <div><span class="label">${f}: </span><span class="value">${row[f] || "—"}</span></div>
-              `).join("")}
+              ${fields.map(f => `<div><span class="label">${f}: </span><span class="value">${row[f] || "—"}</span></div>`).join("")}
             </div>
+            ${(row.__img1 || row.__img2) ? `
+              <div class="imgs">
+                ${row.__img1 ? `<div><img src="${getImgUrl(row.__img1)}" /><div class="img-label">Bild 1</div></div>` : ""}
+                ${row.__img2 ? `<div><img src="${getImgUrl(row.__img2)}" /><div class="img-label">Bild 2</div></div>` : ""}
+              </div>` : ""}
           </div>`).join("")}
       </body></html>`);
       win.document.close();
@@ -133,6 +145,40 @@
     const BG  = { minHeight:"100vh", background:"linear-gradient(135deg,#1e293b 0%,#581c87 50%,#1e293b 100%)", color:"white", padding:"0.5rem" };
     const inp = (x) => ({ padding:"0.4rem 0.6rem", borderRadius:"6px", border:"1px solid rgba(255,255,255,0.2)", background:"rgba(0,0,0,0.3)", color:"white", fontSize:"0.9rem", ...x });
     const btn = (bg, x) => ({ padding:"0.45rem 0.9rem", border:"none", borderRadius:"8px", background:bg||"rgba(255,255,255,0.1)", color:"white", cursor:"pointer", fontSize:"0.85rem", fontWeight:"600", ...x });
+
+    // ── Image Slot Component ──────────────────────────────────────────────────
+    function ImageSlot({ slot, path, getImgUrl, onUpload, onDelete }) {
+      const fileRef = useRef(null);
+      const label = slot === 1 ? "Vorderseite · Bild 1" : "Rückseite · Bild 2";
+      return (
+        <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:"0.3rem" }}>
+          <span style={{ fontSize:"0.7rem", color:"rgba(255,255,255,0.45)", whiteSpace:"nowrap" }}>{label}</span>
+          {path ? (
+            <div style={{ position:"relative" }}>
+              <img
+                className="img-thumb"
+                src={getImgUrl(path)}
+                onClick={() => window.open(getImgUrl(path), "_blank")}
+                title="Klicken zum Vergrößern"
+              />
+              <button
+                onClick={onDelete}
+                title="Bild entfernen"
+                style={{ position:"absolute", top:-7, right:-7, width:18, height:18,
+                  borderRadius:"50%", border:"none", background:"#ef4444",
+                  color:"white", cursor:"pointer", fontSize:"0.65rem", lineHeight:1,
+                  display:"flex", alignItems:"center", justifyContent:"center" }}>✕</button>
+            </div>
+          ) : (
+            <>
+              <input ref={fileRef} type="file" accept="image/*" style={{ display:"none" }}
+                onChange={e => { const f=e.target.files?.[0]; if(f) onUpload(f); e.target.value=""; }} />
+              <button className="img-upload-btn" onClick={() => fileRef.current?.click()} title="Bild hochladen">📷</button>
+            </>
+          )}
+        </div>
+      );
+    }
 
     // ── Login Screen ──────────────────────────────────────────────────────────
     function LoginScreen() {
@@ -174,17 +220,15 @@
               📚 Sammlungen
             </h1>
             <div style={{ display:"flex", marginBottom:"1.25rem", borderBottom:"1px solid rgba(255,255,255,0.15)" }}>
-              <button style={tabStyle(tab==="login")}  onClick={() => { setTab("login");    setError(""); setSuccess(""); }}>Einloggen</button>
-              <button style={tabStyle(tab==="signup")} onClick={() => { setTab("signup");   setError(""); setSuccess(""); }}>Registrieren</button>
+              <button style={tabStyle(tab==="login")}  onClick={() => { setTab("login");  setError(""); setSuccess(""); }}>Einloggen</button>
+              <button style={tabStyle(tab==="signup")} onClick={() => { setTab("signup"); setError(""); setSuccess(""); }}>Registrieren</button>
             </div>
             {success && <p style={{ fontSize:"0.8rem", color:"#86efac", marginBottom:"0.75rem" }}>{success}</p>}
             <form onSubmit={tab==="login" ? login : register} style={{ display:"flex", flexDirection:"column", gap:"0.75rem" }}>
               <input type="email" placeholder="E-Mail" value={email}
-                onChange={e => setEmail(e.target.value)} required
-                style={inp({ width:"100%" })} />
+                onChange={e => setEmail(e.target.value)} required style={inp({ width:"100%" })} />
               <input type="password" placeholder="Passwort (mind. 6 Zeichen)" value={password}
-                onChange={e => setPassword(e.target.value)} required minLength={6}
-                style={inp({ width:"100%" })} />
+                onChange={e => setPassword(e.target.value)} required minLength={6} style={inp({ width:"100%" })} />
               {error && <p style={{ fontSize:"0.8rem", color:"#fca5a5" }}>{error}</p>}
               <button type="submit" disabled={loading}
                 style={btn("linear-gradient(135deg,#a855f7,#6366f1)", { width:"100%", padding:"0.65rem", opacity:loading?0.7:1 })}>
@@ -198,19 +242,20 @@
 
     // ── Main App ──────────────────────────────────────────────────────────────
     function App({ user }) {
-      const [cats,       setCats]       = useState({});
-      const [data,       setData]       = useState({});
-      const [active,     setActive]     = useState(null);
-      const [sortCol,    setSortCol]    = useState(null);
-      const [sortDir,    setSortDir]    = useState("asc");
-      const [filter,     setFilter]     = useState("");
-      const [msg,        setMsg]        = useState("");
-      const [addCatOpen, setAddCatOpen] = useState(false);
-      const [newName,    setNewName]    = useState("");
-      const [newIcon,    setNewIcon]    = useState("📁");
-      const [newColor,   setNewColor]   = useState(PALETTE[3]);
-      const [newFields,  setNewFields]  = useState("");
-      const [loading,    setLoading]    = useState(true);
+      const [cats,         setCats]         = useState({});
+      const [data,         setData]         = useState({});
+      const [active,       setActive]       = useState(null);
+      const [sortCol,      setSortCol]      = useState(null);
+      const [sortDir,      setSortDir]      = useState("asc");
+      const [filter,       setFilter]       = useState("");
+      const [msg,          setMsg]          = useState("");
+      const [addCatOpen,   setAddCatOpen]   = useState(false);
+      const [newName,      setNewName]      = useState("");
+      const [newIcon,      setNewIcon]      = useState("📁");
+      const [newColor,     setNewColor]     = useState(PALETTE[3]);
+      const [newFields,    setNewFields]    = useState("");
+      const [loading,      setLoading]      = useState(true);
+      const [expandedImgs, setExpandedImgs] = useState(new Set());
       const csvRef = useRef(null);
 
       const flash = (m, ms=2200) => { setMsg(m); setTimeout(() => setMsg(""), ms); };
@@ -237,6 +282,54 @@
         };
         load();
       }, []);
+
+      // ── Image helpers ───────────────────────────────────────────────────────
+      const getImgUrl = useCallback((path) => {
+        const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
+        return data.publicUrl;
+      }, []);
+
+      const toggleImgPanel = (id) => setExpandedImgs(prev => {
+        const next = new Set(prev);
+        if (next.has(id)) next.delete(id); else next.add(id);
+        return next;
+      });
+
+      const uploadImage = async (itemId, slot, file) => {
+        const ext = file.name.split(".").pop().toLowerCase() || "jpg";
+        const path = `${user.id}/${itemId}/img${slot}.${ext}`;
+        const { error } = await sb.storage.from(BUCKET).upload(path, file, { upsert:true });
+        if (error) { flash("✗ Bild-Upload fehlgeschlagen"); return; }
+        const key = `__img${slot}`;
+        const row = (data[active]||[]).find(r => r.id===itemId);
+        if (!row) return;
+        const { id:_, ...rowData } = row;
+        await sb.from("items").update({ data:{ ...rowData, [key]:path } }).eq("id", itemId);
+        setData(prev => ({
+          ...prev,
+          [active]: (prev[active]||[]).map(r => r.id===itemId ? { ...r, [key]:path } : r)
+        }));
+        flash("✓ Bild gespeichert");
+      };
+
+      const deleteImage = async (itemId, slot) => {
+        const row = (data[active]||[]).find(r => r.id===itemId);
+        if (!row) return;
+        const key = `__img${slot}`;
+        const path = row[key];
+        if (path) await sb.storage.from(BUCKET).remove([path]);
+        const { id:_, ...rowData } = row;
+        const newData = { ...rowData }; delete newData[key];
+        await sb.from("items").update({ data:newData }).eq("id", itemId);
+        setData(prev => ({
+          ...prev,
+          [active]: (prev[active]||[]).map(r => {
+            if (r.id !== itemId) return r;
+            const nr = { ...r }; delete nr[key]; return nr;
+          })
+        }));
+        flash("✓ Bild entfernt");
+      };
 
       // ── Filter + Sort ───────────────────────────────────────────────────────
       const visible = (() => {
@@ -296,6 +389,12 @@
       };
 
       const delRow = async (id) => {
+        // Also delete images from storage
+        const row = (data[active]||[]).find(r => r.id===id);
+        if (row) {
+          const toRemove = [row.__img1, row.__img2].filter(Boolean);
+          if (toRemove.length) await sb.storage.from(BUCKET).remove(toRemove);
+        }
         setData(prev => ({ ...prev, [active]: (prev[active]||[]).filter(r => r.id!==id) }));
         await sb.from("items").delete().eq("id", id);
       };
@@ -353,6 +452,8 @@
         if (active===id) setActive(null);
       };
 
+      const goBack = () => { setActive(null); setFilter(""); setSortCol(null); setExpandedImgs(new Set()); };
+
       if (loading) return (
         <div style={{ ...BG, display:"flex", alignItems:"center", justifyContent:"center" }}>
           Lade Daten…
@@ -374,9 +475,7 @@
                 ⎋ Logout
               </button>
             </div>
-            <p style={{ fontSize:"0.75rem", color:"rgba(255,255,255,0.4)", marginBottom:"1.5rem" }}>
-              {user.email}
-            </p>
+            <p style={{ fontSize:"0.75rem", color:"rgba(255,255,255,0.4)", marginBottom:"1.5rem" }}>{user.email}</p>
 
             {Object.entries(cats).map(([id, c]) => (
               <div key={id} style={{ display:"flex", gap:"0.5rem", marginBottom:"0.6rem" }}>
@@ -415,8 +514,7 @@
                   {PALETTE.map(c => (
                     <div key={c} onClick={() => setNewColor(c)} style={{
                       width:24, height:24, borderRadius:"50%", background:c, cursor:"pointer",
-                      border: newColor===c ? "3px solid white" : "3px solid transparent",
-                      boxSizing:"border-box"
+                      border: newColor===c ? "3px solid white" : "3px solid transparent", boxSizing:"border-box"
                     }} />
                   ))}
                 </div>
@@ -426,7 +524,6 @@
                 </div>
               </div>
             )}
-
             {msg && <p style={{ marginTop:"1rem", fontSize:"0.85rem",
               color: msg.startsWith("✓") ? "#86efac" : "#fca5a5" }}>{msg}</p>}
           </div>
@@ -438,11 +535,11 @@
         <div style={BG}>
           <div style={{ maxWidth:1600, margin:"0 auto", paddingBottom:"5rem" }}>
 
+            {/* Header */}
             <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center",
               marginBottom:"0.75rem", flexWrap:"wrap", gap:"0.5rem" }}>
               <div style={{ display:"flex", alignItems:"center", gap:"0.6rem" }}>
-                <button onClick={() => { setActive(null); setFilter(""); setSortCol(null); }}
-                  style={btn()}>← Zurück</button>
+                <button onClick={goBack} style={btn()}>← Zurück</button>
                 <h2 style={{ margin:0, fontSize:"1.25rem",
                   background:"linear-gradient(135deg,#fbbf24,#f472b6)",
                   WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>
@@ -452,7 +549,7 @@
                   color: msg.startsWith("✓") ? "#86efac" : "#fca5a5" }}>{msg}</span>}
               </div>
               <div style={{ display:"flex", gap:"0.4rem", flexWrap:"wrap" }}>
-                <button onClick={() => printCollection(cat, fields, rows)}
+                <button onClick={() => printCollection(cat, fields, rows, getImgUrl)}
                   style={btn("linear-gradient(135deg,#f59e0b,#d97706)")}>🖨 Drucken</button>
                 <button onClick={exportCSV}
                   style={btn("linear-gradient(135deg,#3b82f6,#06b6d4)")}>⬇ CSV</button>
@@ -462,20 +559,17 @@
               </div>
             </div>
 
+            {/* Search */}
             <div style={{ display:"flex", gap:"0.4rem", alignItems:"center", marginBottom:"0.75rem", flexWrap:"wrap" }}>
               <input type="text"
                 placeholder="🔍 Suche  (Ei = exakt · Ei* = beginnt mit · *ei = endet mit)"
-                value={filter}
-                onChange={e => setFilter(e.target.value)}
-                style={inp({ flex:1, maxWidth:400 })}
-              />
+                value={filter} onChange={e => setFilter(e.target.value)}
+                style={inp({ flex:1, maxWidth:400 })} />
               {voice.supported && (
                 <button onClick={() => voice.listening ? voice.stop() : voice.start()}
                   title={voice.listening ? "Aufnahme stoppen" : "Spracheingabe (Deutsch)"}
-                  style={btn(
-                    voice.listening ? "linear-gradient(135deg,#ef4444,#dc2626)" : "linear-gradient(135deg,#6366f1,#8b5cf6)",
-                    { minWidth:44, minHeight:40, fontSize:"1.1rem" }
-                  )}>
+                  style={btn(voice.listening ? "linear-gradient(135deg,#ef4444,#dc2626)" : "linear-gradient(135deg,#6366f1,#8b5cf6)",
+                    { minWidth:44, minHeight:40, fontSize:"1.1rem" })}>
                   {voice.listening ? "⏹️" : "🎤"}
                 </button>
               )}
@@ -485,6 +579,7 @@
               </span>
             </div>
 
+            {/* Table */}
             <div style={{ overflowX:"auto" }}>
               <table style={{ width:"100%", borderCollapse:"collapse",
                 background:"rgba(0,0,0,0.3)", borderRadius:"10px", overflow:"hidden" }}>
@@ -494,42 +589,76 @@
                       <th key={f} onClick={() => handleSort(f)} style={{
                         padding:"0.65rem 0.6rem", textAlign:"left", cursor:"pointer",
                         userSelect:"none", fontSize:"0.8rem",
-                        color: sortCol===f ? "#fbbf24" : "rgba(255,255,255,0.65)",
-                        whiteSpace:"nowrap"
+                        color: sortCol===f ? "#fbbf24" : "rgba(255,255,255,0.65)", whiteSpace:"nowrap"
                       }}>
                         {f}&nbsp;{sortCol===f ? (sortDir==="asc" ? "↑" : "↓") : "⇅"}
                       </th>
                     ))}
-                    <th style={{ width:36 }}></th>
+                    <th style={{ width:32, fontSize:"0.75rem", color:"rgba(255,255,255,0.4)", textAlign:"center" }}>📷</th>
+                    <th style={{ width:32 }}></th>
                   </tr>
                 </thead>
                 <tbody>
                   {visible.map((item, idx) => (
-                    <tr key={item.id} style={{
-                      background: idx%2===0 ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.065)",
-                      borderBottom:"1px solid rgba(255,255,255,0.05)"
-                    }}>
-                      {fields.map(f => (
-                        <td key={f} style={{ padding:"0.2rem 0.35rem" }}>
-                          <input
-                            value={item[f] || ""}
-                            onChange={e => cellChange(item.id, f, e.target.value)}
-                            onBlur={e => saveCell(item.id, f, e.target.value)}
-                            style={inp({ width:"100%", minWidth:70, padding:"0.35rem 0.45rem" })}
-                          />
+                    <React.Fragment key={item.id}>
+                      {/* Data row */}
+                      <tr style={{
+                        background: idx%2===0 ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.065)",
+                        borderBottom: expandedImgs.has(item.id) ? "none" : "1px solid rgba(255,255,255,0.05)"
+                      }}>
+                        {fields.map(f => (
+                          <td key={f} style={{ padding:"0.2rem 0.35rem" }}>
+                            <input
+                              value={item[f] || ""}
+                              onChange={e => cellChange(item.id, f, e.target.value)}
+                              onBlur={e => saveCell(item.id, f, e.target.value)}
+                              style={inp({ width:"100%", minWidth:70, padding:"0.35rem 0.45rem" })}
+                            />
+                          </td>
+                        ))}
+                        {/* Camera button – shows indicator if images exist */}
+                        <td style={{ padding:"0.2rem 0.25rem", textAlign:"center" }}>
+                          <button
+                            onClick={() => toggleImgPanel(item.id)}
+                            title={expandedImgs.has(item.id) ? "Bilder ausblenden" : "Bilder anzeigen / hochladen"}
+                            style={{ background:"transparent", border:"none", cursor:"pointer",
+                              fontSize:"1rem", opacity: expandedImgs.has(item.id) ? 1 : 0.5,
+                              filter: (item.__img1||item.__img2) ? "none" : "grayscale(1)" }}>
+                            {(item.__img1||item.__img2) ? "🖼️" : "📷"}
+                          </button>
                         </td>
-                      ))}
-                      <td style={{ padding:"0.2rem 0.25rem", textAlign:"center" }}>
-                        <button onClick={() => delRow(item.id)}
-                          style={{ background:"transparent", border:"none",
-                            color:"rgba(239,68,68,0.7)", cursor:"pointer", fontSize:"1rem" }}
-                          title="Zeile löschen">🗑</button>
-                      </td>
-                    </tr>
+                        <td style={{ padding:"0.2rem 0.25rem", textAlign:"center" }}>
+                          <button onClick={() => delRow(item.id)}
+                            style={{ background:"transparent", border:"none",
+                              color:"rgba(239,68,68,0.7)", cursor:"pointer", fontSize:"1rem" }}
+                            title="Zeile löschen">🗑</button>
+                        </td>
+                      </tr>
+
+                      {/* Image panel row */}
+                      {expandedImgs.has(item.id) && (
+                        <tr style={{ background: idx%2===0 ? "rgba(139,92,246,0.08)" : "rgba(139,92,246,0.12)",
+                          borderBottom:"1px solid rgba(255,255,255,0.05)" }}>
+                          <td colSpan={fields.length + 2} style={{ padding:"0.6rem 0.8rem" }}>
+                            <div style={{ display:"flex", gap:"1.25rem", alignItems:"flex-start", flexWrap:"wrap" }}>
+                              <ImageSlot slot={1} path={item.__img1} getImgUrl={getImgUrl}
+                                onUpload={(f) => uploadImage(item.id, 1, f)}
+                                onDelete={() => deleteImage(item.id, 1)} />
+                              <ImageSlot slot={2} path={item.__img2} getImgUrl={getImgUrl}
+                                onUpload={(f) => uploadImage(item.id, 2, f)}
+                                onDelete={() => deleteImage(item.id, 2)} />
+                              <span style={{ fontSize:"0.7rem", color:"rgba(255,255,255,0.3)", alignSelf:"flex-end", paddingBottom:"0.2rem" }}>
+                                Klick auf Bild zum Vergrößern
+                              </span>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
                   ))}
                   {visible.length === 0 && (
                     <tr>
-                      <td colSpan={fields.length+1} style={{
+                      <td colSpan={fields.length+2} style={{
                         padding:"2.5rem", textAlign:"center", color:"rgba(255,255,255,0.35)" }}>
                         {filter ? "Keine Treffer für diese Suche" : "Noch leer – ＋ unten rechts drücken"}
                       </td>
@@ -541,17 +670,14 @@
           </div>
 
           {/* Floating "Neue Zeile" Button */}
-          <button
-            onClick={addRow}
-            title="Neue Zeile hinzufügen"
+          <button onClick={addRow} title="Neue Zeile hinzufügen"
             style={{
               position:"fixed", bottom:"1.5rem", right:"1.5rem",
               width:58, height:58, borderRadius:"50%", border:"none",
               background:"linear-gradient(135deg,#10b981,#059669)",
               color:"white", fontSize:"2rem", cursor:"pointer",
               boxShadow:"0 4px 24px rgba(0,0,0,0.5)",
-              display:"flex", alignItems:"center", justifyContent:"center",
-              zIndex:100
+              display:"flex", alignItems:"center", justifyContent:"center", zIndex:100
             }}>＋</button>
         </div>
       );
@@ -575,9 +701,7 @@
 
       if (checking) return (
         <div style={{ minHeight:"100vh", background:"linear-gradient(135deg,#1e293b 0%,#581c87 50%,#1e293b 100%)",
-          display:"flex", alignItems:"center", justifyContent:"center", color:"white" }}>
-          …
-        </div>
+          display:"flex", alignItems:"center", justifyContent:"center", color:"white" }}>…</div>
       );
       return user ? <App user={user} /> : <LoginScreen />;
     }
