@@ -33,7 +33,7 @@
       "sb_publishable_2meBoS5JXmGgJt9MAKq02g_cOWhgSqf"
     );
 
-    // ── Voice Hook ─────────────────────────────────────────────────────────────
+    // ── Voice Hook ────────────────────────────────────────────────────────────
     const useVoice = (onResult) => {
       const recRef = useRef(null);
       const cbRef  = useRef(onResult);
@@ -63,10 +63,10 @@
       return { listening, supported, start, stop };
     };
 
-    // ── Constants ──────────────────────────────────────────────────────────────
+    // ── Constants ─────────────────────────────────────────────────────────────
     const PALETTE = ["#a855f7","#3b82f6","#f59e0b","#10b981","#ef4444","#ec4899","#06b6d4","#6366f1","#f97316","#84cc16"];
 
-    // ── CSV helpers ─────────────────────────────────────────────────────────────
+    // ── CSV helpers ───────────────────────────────────────────────────────────
     const parseCSV = (text) => {
       const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter(Boolean);
       const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim());
@@ -129,16 +129,18 @@
       setTimeout(() => win.print(), 400);
     };
 
-    // ── Styles ──────────────────────────────────────────────────────────────
+    // ── Styles ────────────────────────────────────────────────────────────────
     const BG  = { minHeight:"100vh", background:"linear-gradient(135deg,#1e293b 0%,#581c87 50%,#1e293b 100%)", color:"white", padding:"0.5rem" };
     const inp = (x) => ({ padding:"0.4rem 0.6rem", borderRadius:"6px", border:"1px solid rgba(255,255,255,0.2)", background:"rgba(0,0,0,0.3)", color:"white", fontSize:"0.9rem", ...x });
     const btn = (bg, x) => ({ padding:"0.45rem 0.9rem", border:"none", borderRadius:"8px", background:bg||"rgba(255,255,255,0.1)", color:"white", cursor:"pointer", fontSize:"0.85rem", fontWeight:"600", ...x });
 
-    // ── Login Screen ─────────────────────────────────────────────────────────────
+    // ── Login Screen ──────────────────────────────────────────────────────────
     function LoginScreen() {
+      const [tab,      setTab]      = useState("login");
       const [email,    setEmail]    = useState("");
       const [password, setPassword] = useState("");
       const [error,    setError]    = useState("");
+      const [success,  setSuccess]  = useState("");
       const [loading,  setLoading]  = useState(false);
 
       const login = async (e) => {
@@ -148,28 +150,45 @@
         if (error) { setError("E-Mail oder Passwort falsch"); setLoading(false); }
       };
 
+      const register = async (e) => {
+        e.preventDefault();
+        setLoading(true); setError("");
+        const { error } = await sb.auth.signUp({ email, password });
+        if (error) { setError(error.message); setLoading(false); }
+        else { setSuccess("✓ Account erstellt – du kannst dich jetzt einloggen!"); setTab("login"); setLoading(false); }
+      };
+
+      const tabStyle = (active) => ({
+        flex:1, padding:"0.5rem", border:"none", cursor:"pointer", fontWeight:"600", fontSize:"0.85rem",
+        background: active ? "rgba(139,92,246,0.4)" : "transparent",
+        color: active ? "white" : "rgba(255,255,255,0.5)",
+        borderBottom: active ? "2px solid #a855f7" : "2px solid transparent"
+      });
+
       return (
         <div style={{ ...BG, display:"flex", alignItems:"center", justifyContent:"center" }}>
           <div style={{ width:"100%", maxWidth:360, background:"rgba(0,0,0,0.45)", borderRadius:"16px", padding:"2rem" }}>
-            <h1 style={{ fontSize:"1.8rem", marginBottom:"0.25rem",
+            <h1 style={{ fontSize:"1.8rem", marginBottom:"1.25rem",
               background:"linear-gradient(135deg,#fbbf24,#f472b6)",
               WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" }}>
               📚 Sammlungen
             </h1>
-            <p style={{ fontSize:"0.8rem", color:"rgba(255,255,255,0.4)", marginBottom:"1.5rem" }}>
-              Bitte einloggen
-            </p>
-            <form onSubmit={login} style={{ display:"flex", flexDirection:"column", gap:"0.75rem" }}>
+            <div style={{ display:"flex", marginBottom:"1.25rem", borderBottom:"1px solid rgba(255,255,255,0.15)" }}>
+              <button style={tabStyle(tab==="login")}  onClick={() => { setTab("login");    setError(""); setSuccess(""); }}>Einloggen</button>
+              <button style={tabStyle(tab==="signup")} onClick={() => { setTab("signup");   setError(""); setSuccess(""); }}>Registrieren</button>
+            </div>
+            {success && <p style={{ fontSize:"0.8rem", color:"#86efac", marginBottom:"0.75rem" }}>{success}</p>}
+            <form onSubmit={tab==="login" ? login : register} style={{ display:"flex", flexDirection:"column", gap:"0.75rem" }}>
               <input type="email" placeholder="E-Mail" value={email}
                 onChange={e => setEmail(e.target.value)} required
                 style={inp({ width:"100%" })} />
-              <input type="password" placeholder="Passwort" value={password}
-                onChange={e => setPassword(e.target.value)} required
+              <input type="password" placeholder="Passwort (mind. 6 Zeichen)" value={password}
+                onChange={e => setPassword(e.target.value)} required minLength={6}
                 style={inp({ width:"100%" })} />
               {error && <p style={{ fontSize:"0.8rem", color:"#fca5a5" }}>{error}</p>}
               <button type="submit" disabled={loading}
                 style={btn("linear-gradient(135deg,#a855f7,#6366f1)", { width:"100%", padding:"0.65rem", opacity:loading?0.7:1 })}>
-                {loading ? "…" : "Einloggen"}
+                {loading ? "…" : tab==="login" ? "Einloggen" : "Account erstellen"}
               </button>
             </form>
           </div>
@@ -201,7 +220,7 @@
       const fields = cat ? cat.fields : [];
       const rows   = active ? (data[active] || []) : [];
 
-      // ── Load ──────────────────────────────────────────────────────────────
+      // ── Load ────────────────────────────────────────────────────────────────
       useEffect(() => {
         const load = async () => {
           const { data: catRows }  = await sb.from("categories").select("*").order("created_at");
@@ -219,7 +238,7 @@
         load();
       }, []);
 
-      // ── Filter + Sort ─────────────────────────────────────────────────────────────
+      // ── Filter + Sort ───────────────────────────────────────────────────────
       const visible = (() => {
         let r = rows;
         if (filter.trim()) {
@@ -251,7 +270,7 @@
         else { setSortCol(col); setSortDir("asc"); }
       };
 
-      // ── Row ops ──────────────────────────────────────────────────────────────
+      // ── Row ops ─────────────────────────────────────────────────────────────
       const addRow = async () => {
         const emptyData = Object.fromEntries(fields.map(f => [f,""]));
         const { data: created } = await sb.from("items")
@@ -281,7 +300,7 @@
         await sb.from("items").delete().eq("id", id);
       };
 
-      // ── CSV ──────────────────────────────────────────────────────────────
+      // ── CSV ─────────────────────────────────────────────────────────────────
       const exportCSV = () => {
         if (!rows.length) { flash("⚠ Keine Daten"); return; }
         const blob = new Blob([toCSV(fields, rows)], { type:"text/csv;charset=utf-8;" });
@@ -309,7 +328,7 @@
         e.target.value = "";
       };
 
-      // ── Categories ─────────────────────────────────────────────────────────────
+      // ── Categories ──────────────────────────────────────────────────────────
       const addCategory = async () => {
         const name = newName.trim();
         if (!name) { flash("⚠ Name fehlt"); return; }
@@ -414,7 +433,7 @@
         </div>
       );
 
-      // ════ COLLECTION VIEW ════════════════════════════════════════════════════
+      // ════ COLLECTION VIEW ══════════════════════════════════════════════════
       return (
         <div style={BG}>
           <div style={{ maxWidth:1600, margin:"0 auto", paddingBottom:"5rem" }}>
@@ -457,7 +476,7 @@
                     voice.listening ? "linear-gradient(135deg,#ef4444,#dc2626)" : "linear-gradient(135deg,#6366f1,#8b5cf6)",
                     { minWidth:44, minHeight:40, fontSize:"1.1rem" }
                   )}>
-                  {voice.listening ? "⏹️" : "🍤"}
+                  {voice.listening ? "⏹️" : "🎤"}
                 </button>
               )}
               {filter && <button onClick={() => setFilter("")} style={btn()}>✕</button>}
@@ -521,6 +540,7 @@
             </div>
           </div>
 
+          {/* Floating "Neue Zeile" Button */}
           <button
             onClick={addRow}
             title="Neue Zeile hinzufügen"
@@ -537,7 +557,7 @@
       );
     }
 
-    // ── Root (Auth wrapper) ───────────────────────────────────────────────────────
+    // ── Root (Auth wrapper) ───────────────────────────────────────────────────
     function Root() {
       const [user,     setUser]     = useState(null);
       const [checking, setChecking] = useState(true);
