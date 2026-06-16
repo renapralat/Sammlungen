@@ -89,6 +89,8 @@ const useVoice = onResult => {
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const PALETTE = ["#a855f7", "#3b82f6", "#f59e0b", "#10b981", "#ef4444", "#ec4899", "#06b6d4", "#6366f1", "#f97316", "#84cc16"];
+const ICON_EMOJIS = ["📚","📖","📝","🗒️","🎬","🎵","🎨","🎭","🎮","🕹️","⚽","🏆","🎯","🎲","🃏","🌿","🐾","🌸","🦁","🐕","🐈","🌍","✈️","🏠","🏡","🍕","☕","🍷","🍎","🧁","💎","🔑","📦","🪙","🏅","💍","💻","📱","🔧","⚡","📷","🎙️","👤","❤️","💰","📈","🌟","🔥","🎁","🧩","🪴","🏺","🖼️","🗿","🪐","🧸","🎠","🎪","🪆","🧲","⚗️","🔬","📡","🏋️","🚗","🚂","⛵","🎻","🎹"];
+
 
 // ── CSV helpers ───────────────────────────────────────────────────────────
 const parseCSV = text => {
@@ -926,21 +928,54 @@ function App({
       gap: "0.5rem",
       marginBottom: "0.5rem"
     }
-  }, /*#__PURE__*/React.createElement("input", {
-    value: editIcon,
-    onChange: e => setEditIcon(e.target.value),
-    style: inp({
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
       width: 52,
-      textAlign: "center",
-      fontSize: "1.3rem"
-    })
-  }), /*#__PURE__*/React.createElement("input", {
+      height: 42,
+      borderRadius: "6px",
+      border: "1px solid rgba(255,255,255,0.2)",
+      background: "rgba(0,0,0,0.3)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: "1.5rem",
+      flexShrink: 0
+    }
+  }, editIcon || cats[id].icon), /*#__PURE__*/React.createElement("input", {
     value: editName,
     onChange: e => setEditName(e.target.value),
     style: inp({
       flex: 1
     })
   })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: "4px",
+      marginBottom: "0.6rem",
+      background: "rgba(0,0,0,0.2)",
+      borderRadius: "8px",
+      padding: "6px",
+      maxHeight: "120px",
+      overflowY: "auto"
+    }
+  }, ICON_EMOJIS.map(em => /*#__PURE__*/React.createElement("button", {
+    key: em,
+    onClick: () => setEditIcon(em),
+    style: {
+      width: 34,
+      height: 34,
+      border: editIcon === em ? "2px solid #a855f7" : "2px solid transparent",
+      borderRadius: "6px",
+      background: editIcon === em ? "rgba(168,85,247,0.25)" : "transparent",
+      cursor: "pointer",
+      fontSize: "1.2rem",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 0
+    }
+  }, em))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: "0.5rem"
@@ -1009,23 +1044,55 @@ function App({
       gap: "0.5rem",
       marginBottom: "0.5rem"
     }
-  }, /*#__PURE__*/React.createElement("input", {
-    value: newIcon,
-    onChange: e => setNewIcon(e.target.value),
-    placeholder: "\uD83C\uDFF7",
-    style: inp({
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
       width: 52,
-      textAlign: "center",
-      fontSize: "1.3rem"
-    })
-  }), /*#__PURE__*/React.createElement("input", {
+      height: 42,
+      borderRadius: "6px",
+      border: "1px solid rgba(255,255,255,0.2)",
+      background: "rgba(0,0,0,0.3)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: "1.5rem",
+      flexShrink: 0
+    }
+  }, newIcon), /*#__PURE__*/React.createElement("input", {
     value: newName,
     onChange: e => setNewName(e.target.value),
     placeholder: "Kategoriename",
     style: inp({
       flex: 1
     })
-  })), /*#__PURE__*/React.createElement("input", {
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexWrap: "wrap",
+      gap: "4px",
+      marginBottom: "0.6rem",
+      background: "rgba(0,0,0,0.2)",
+      borderRadius: "8px",
+      padding: "6px",
+      maxHeight: "120px",
+      overflowY: "auto"
+    }
+  }, ICON_EMOJIS.map(em => /*#__PURE__*/React.createElement("button", {
+    key: em,
+    onClick: () => setNewIcon(em),
+    style: {
+      width: 34,
+      height: 34,
+      border: newIcon === em ? "2px solid #a855f7" : "2px solid transparent",
+      borderRadius: "6px",
+      background: newIcon === em ? "rgba(168,85,247,0.25)" : "transparent",
+      cursor: "pointer",
+      fontSize: "1.2rem",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: 0
+    }
+  }, em))), /*#__PURE__*/React.createElement("input", {
     value: newFields,
     onChange: e => setNewFields(e.target.value),
     placeholder: "Felder (kommagetrennt): Feld1, Feld2, Feld3",
