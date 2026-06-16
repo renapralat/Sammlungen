@@ -27,6 +27,7 @@
   <script src="react.min.js"></script>
   <script src="react-dom.min.js"></script>
   <script src="supabase.min.js"></script>
+  <script src="jszip.min.js"></script>
   <script>
 const {
   useState,
@@ -697,6 +698,33 @@ function App({
     URL.revokeObjectURL(a.href);
     flash("✓ CSV exportiert");
   };
+  const downloadImagesZip = async () => {
+    const imgRows = rows.filter(r => r.__img1 || r.__img2 || r.__img3 || r.__img4);
+    if (!imgRows.length) { flash("⚠ Keine Bilder vorhanden"); return; }
+    flash("📦 ZIP wird erstellt…", 30000);
+    const zip = new JSZip();
+    for (const row of imgRows) {
+      const key = String(row[fields[0]] || row.id).replace(/[/\\:*?"<>|]/g, "_").trim() || String(row.id);
+      for (let slot = 1; slot <= 4; slot++) {
+        const path = row[`__img${slot}`];
+        if (!path) continue;
+        const url = getImgUrl(path);
+        const ext = path.split(".").pop().toLowerCase() || "jpg";
+        try {
+          const resp = await fetch(url);
+          const blob = await resp.blob();
+          zip.file(`${key}_${slot}.${ext}`, blob);
+        } catch (_) {}
+      }
+    }
+    const blob = await zip.generateAsync({ type: "blob" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${cat.name}_Bilder_${new Date().toISOString().slice(0, 10)}.zip`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    flash("✓ ZIP heruntergeladen");
+  };
   const importCSV = async e => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1124,7 +1152,10 @@ function App({
   }, "⬇ CSV"), /*#__PURE__*/React.createElement("button", {
     onClick: () => csvRef.current?.click(),
     style: btn("linear-gradient(135deg,#6366f1,#8b5cf6)")
-  }, "⬆ CSV"), /*#__PURE__*/React.createElement("input", {
+  }, "⬆ CSV"), /*#__PURE__*/React.createElement("button", {
+    onClick: downloadImagesZip,
+    style: btn("linear-gradient(135deg,#7c3aed,#4f46e5)")
+  }, "📦 ZIP"), /*#__PURE__*/React.createElement("input", {
     ref: csvRef,
     type: "file",
     accept: ".csv",
