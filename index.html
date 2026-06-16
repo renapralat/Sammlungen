@@ -89,7 +89,6 @@ const useVoice = onResult => {
 
 // ── Constants ─────────────────────────────────────────────────────────────
 const PALETTE = ["#a855f7", "#3b82f6", "#f59e0b", "#10b981", "#ef4444", "#ec4899", "#06b6d4", "#6366f1", "#f97316", "#84cc16"];
-const ICON_EMOJIS = ["📚","📖","📝","🗒️","🎬","🎵","🎨","🎭","🎮","🕹️","⚽","🏆","🎯","🎲","🃏","🌿","🐾","🌸","🦁","🐕","🐈","🌍","✈️","🏠","🏡","🍕","☕","🍷","🍎","🧁","💎","🔑","📦","🪙","🏅","💍","💻","📱","🔧","⚡","📷","🎙️","👤","❤️","💰","📈","🌟","🔥","🎁","🧩","🪴","🏺","🖼️","🗿","🪐","🧸","🎠","🎪","🪆","🧲","⚗️","🔬","📡","🏋️","🚗","🚂","⛵","🎻","🎹"];
 
 
 // ── CSV helpers ───────────────────────────────────────────────────────────
@@ -130,14 +129,10 @@ const toCSV = (fields, rows) => {
   return "﻿" + [header, ...body].join("\n");
 };
 
-// ── Print (Tabellenform mit Bildern rechts) ───────────────────────────────
+// ── Print (Tabellenform mit Bildern als eigene Zeile) ─────────────────────
 const printCollection = (cat, fields, rows, getImgUrl) => {
-  const date = new Date().toLocaleDateString("de-DE", {
-    day: "2-digit",
-    month: "long",
-    year: "numeric"
-  });
-  const hasImages = rows.some(r => r.__img1 || r.__img2);
+  const date = new Date().toLocaleDateString("de-DE", { day: "2-digit", month: "long", year: "numeric" });
+  const hasImages = rows.some(r => r.__img1 || r.__img2 || r.__img3 || r.__img4);
   const win = window.open("", "_blank");
   win.document.write(`<!DOCTYPE html><html lang="de"><head>
         <meta charset="UTF-8">
@@ -149,12 +144,13 @@ const printCollection = (cat, fields, rows, getImgUrl) => {
           table { width: 100%; border-collapse: collapse; table-layout: fixed; }
           th { background: #334155; color: white; padding: 6px 8px; text-align: left; font-size: 11px; font-weight: 700; }
           td { padding: 5px 8px; border-bottom: 1px solid #e2e8f0; vertical-align: top; word-break: break-word; }
-          tr:nth-child(even) td { background: #f8fafc; }
-          .col-first { white-space: nowrap; font-weight: 600; width: auto; }
-          .col-img { width: 130px; text-align: center; }
-          .img-wrap { display: flex; gap: 4px; justify-content: center; }
-          .img-wrap img { width: 56px; height: 42px; object-fit: cover; border-radius: 3px; border: 1px solid #cbd5e1; }
-          .img-label { font-size: 9px; color: #94a3b8; text-align: center; }
+          tr.data-row:nth-child(4n+1) td, tr.data-row:nth-child(4n+2) td { background: #f8fafc; }
+          .col-first { font-weight: 600; }
+          .img-row td { padding: 6px 8px 10px; border-bottom: 1px solid #e2e8f0; }
+          .img-wrap { display: flex; gap: 8px; flex-wrap: wrap; }
+          .img-wrap img { width: 80px; height: 60px; object-fit: cover; border-radius: 4px; border: 1px solid #cbd5e1; }
+          .long-row td { padding: 4px 8px 8px; border-bottom: 1px solid #e2e8f0; font-size: 11px; color: #334155; }
+          .long-label { font-size: 9px; color: #94a3b8; font-weight: 700; text-transform: uppercase; margin-bottom: 2px; }
           @media print { body { margin: 10px; } }
         </style>
       </head><body>
@@ -163,19 +159,22 @@ const printCollection = (cat, fields, rows, getImgUrl) => {
         <table>
           <thead><tr>
             ${fields.map((f, i) => `<th class="${i === 0 ? 'col-first' : ''}">${f}</th>`).join("")}
-            ${hasImages ? `<th class="col-img">Bilder</th>` : ""}
           </tr></thead>
           <tbody>
-            ${rows.map(row => `<tr>
-              ${fields.map((f, i) => `<td class="${i === 0 ? 'col-first' : ''}">${row[f] || "—"}</td>`).join("")}
-              ${hasImages ? `<td class="col-img">
-                ${row.__img1 || row.__img2 ? `
-                  <div class="img-wrap">
-                    ${row.__img1 ? `<div><img src="${getImgUrl(row.__img1)}" /><div class="img-label">Bild 1</div></div>` : ""}
-                    ${row.__img2 ? `<div><img src="${getImgUrl(row.__img2)}" /><div class="img-label">Bild 2</div></div>` : ""}
-                  </div>` : ""}
-              </td>` : ""}
-            </tr>`).join("")}
+            ${rows.map(row => {
+              const shortFields = fields.filter(f => (row[f] || "").length <= 60);
+              const longFields = fields.filter(f => (row[f] || "").length > 60);
+              const imgs = [row.__img1, row.__img2, row.__img3, row.__img4].filter(Boolean);
+              return `<tr class="data-row">
+                ${fields.map((f, i) => `<td class="${i === 0 ? 'col-first' : ''}">${shortFields.includes(f) ? (row[f] || "—") : '<em style="color:#94a3b8">↓</em>'}</td>`).join("")}
+              </tr>
+              ${longFields.length ? `<tr class="long-row"><td colspan="${fields.length}">
+                ${longFields.map(f => `<div><div class="long-label">${f}</div>${row[f]}</div>`).join("")}
+              </td></tr>` : ""}
+              ${imgs.length ? `<tr class="img-row"><td colspan="${fields.length}">
+                <div class="img-wrap">${imgs.map(p => `<img src="${getImgUrl(p)}" />`).join("")}</div>
+              </td></tr>` : ""}`;
+            }).join("")}
           </tbody>
         </table>
       </body></html>`);
@@ -220,7 +219,6 @@ function ImageSlot({
   onDelete
 }) {
   const fileRef = useRef(null);
-  const label = slot === 1 ? "Vorderseite · Bild 1" : "Rückseite · Bild 2";
   return /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
@@ -228,13 +226,7 @@ function ImageSlot({
       alignItems: "center",
       gap: "0.3rem"
     }
-  }, /*#__PURE__*/React.createElement("span", {
-    style: {
-      fontSize: "0.7rem",
-      color: "rgba(255,255,255,0.45)",
-      whiteSpace: "nowrap"
-    }
-  }, label), path ? /*#__PURE__*/React.createElement("div", {
+  }, path ? /*#__PURE__*/React.createElement("div", {
     style: {
       position: "relative"
     }
@@ -263,7 +255,7 @@ function ImageSlot({
       alignItems: "center",
       justifyContent: "center"
     }
-  }, "\u2715")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("input", {
+  }, "✕")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("input", {
     ref: fileRef,
     type: "file",
     accept: "image/*",
@@ -279,7 +271,7 @@ function ImageSlot({
     className: "img-upload-btn",
     onClick: () => fileRef.current?.click(),
     title: "Bild hochladen"
-  }, "\uD83D\uDCF7")));
+  }, "📷")));
 }
 
 // ── Login Screen ──────────────────────────────────────────────────────────
@@ -359,7 +351,7 @@ function LoginScreen() {
       WebkitTextFillColor: "transparent",
       backgroundClip: "text"
     }
-  }, "\uD83D\uDCDA Sammlungen"), /*#__PURE__*/React.createElement("div", {
+  }, "📚 Sammlungen"), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       marginBottom: "1.25rem",
@@ -665,10 +657,11 @@ function App({
     }).eq("id", id);
   };
   const delRow = async id => {
+    if (!window.confirm("Eintrag wirklich löschen?")) return;
     // Also delete images from storage
     const row = (data[active] || []).find(r => r.id === id);
     if (row) {
-      const toRemove = [row.__img1, row.__img2].filter(Boolean);
+      const toRemove = [row.__img1, row.__img2, row.__img3, row.__img4].filter(Boolean);
       if (toRemove.length) await sb.storage.from(BUCKET).remove(toRemove);
     }
     setData(prev => ({
@@ -676,6 +669,16 @@ function App({
       [active]: (prev[active] || []).filter(r => r.id !== id)
     }));
     await sb.from("items").delete().eq("id", id);
+  };
+  const copyRow = async id => {
+    const row = (data[active] || []).find(r => r.id === id);
+    if (!row) return;
+    const { id: _, __img1, __img2, __img3, __img4, ...rowData } = row;
+    const { data: created } = await sb.from("items").insert([{ category_id: active, user_id: user.id, data: rowData }]).select();
+    if (!created?.length) return;
+    const newRow = { id: created[0].id, ...rowData };
+    setData(prev => ({ ...prev, [active]: [newRow, ...(prev[active] || [])] }));
+    flash("✓ Eintrag kopiert");
   };
 
   // ── CSV ─────────────────────────────────────────────────────────────────
@@ -831,12 +834,12 @@ function App({
     style: {
       fontSize: "1.1rem"
     }
-  }, "Lade Daten\u2026"), /*#__PURE__*/React.createElement("div", {
+  }, "Lade Daten…"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: "0.75rem",
       color: "rgba(255,255,255,0.4)"
     }
-  }, "Beim ersten Aufruf kann es 10\u201320 Sek. dauern."));
+  }, "Beim ersten Aufruf kann es 10–20 Sek. dauern."));
   if (loadError) return /*#__PURE__*/React.createElement("div", {
     style: {
       ...BG,
@@ -852,7 +855,7 @@ function App({
     style: {
       fontSize: "2rem"
     }
-  }, "\u26A0\uFE0F"), /*#__PURE__*/React.createElement("div", {
+  }, "⚠️"), /*#__PURE__*/React.createElement("div", {
     style: {
       fontSize: "1rem"
     }
@@ -868,7 +871,7 @@ function App({
       padding: "0.65rem 1.5rem",
       fontSize: "1rem"
     })
-  }, "\uD83D\uDD04 Erneut versuchen"), /*#__PURE__*/React.createElement("button", {
+  }, "🔄 Erneut versuchen"), /*#__PURE__*/React.createElement("button", {
     onClick: () => sb.auth.signOut(),
     style: btn("rgba(255,255,255,0.1)", {
       fontSize: "0.8rem"
@@ -899,13 +902,13 @@ function App({
       WebkitTextFillColor: "transparent",
       backgroundClip: "text"
     }
-  }, "\uD83D\uDCDA Sammlungen"), /*#__PURE__*/React.createElement("button", {
+  }, "📚 Sammlungen"), /*#__PURE__*/React.createElement("button", {
     onClick: () => sb.auth.signOut(),
     style: btn("rgba(239,68,68,0.2)", {
       fontSize: "0.75rem",
       padding: "0.3rem 0.6rem"
     })
-  }, "\u238B Logout")), /*#__PURE__*/React.createElement("p", {
+  }, "⎋ Logout")), /*#__PURE__*/React.createElement("p", {
     style: {
       fontSize: "0.75rem",
       color: "rgba(255,255,255,0.4)",
@@ -928,54 +931,17 @@ function App({
       gap: "0.5rem",
       marginBottom: "0.5rem"
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 52,
-      height: 42,
-      borderRadius: "6px",
-      border: "1px solid rgba(255,255,255,0.2)",
-      background: "rgba(0,0,0,0.3)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: "1.5rem",
-      flexShrink: 0
-    }
-  }, editIcon || cats[id].icon), /*#__PURE__*/React.createElement("input", {
+  }, React.createElement("input", {
+    value: editIcon,
+    onChange: e => setEditIcon(e.target.value),
+    style: inp({ width: 52, textAlign: "center", fontSize: "1.3rem" })
+  }), /*#__PURE__*/React.createElement("input", {
     value: editName,
     onChange: e => setEditName(e.target.value),
     style: inp({
       flex: 1
     })
   })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexWrap: "wrap",
-      gap: "4px",
-      marginBottom: "0.6rem",
-      background: "rgba(0,0,0,0.2)",
-      borderRadius: "8px",
-      padding: "6px",
-      maxHeight: "120px",
-      overflowY: "auto"
-    }
-  }, ICON_EMOJIS.map(em => /*#__PURE__*/React.createElement("button", {
-    key: em,
-    onClick: () => setEditIcon(em),
-    style: {
-      width: 34,
-      height: 34,
-      border: editIcon === em ? "2px solid #a855f7" : "2px solid transparent",
-      borderRadius: "6px",
-      background: editIcon === em ? "rgba(168,85,247,0.25)" : "transparent",
-      cursor: "pointer",
-      fontSize: "1.2rem",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: 0
-    }
-  }, em))), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: "0.5rem"
@@ -1014,14 +980,14 @@ function App({
       padding: "0.5rem 0.7rem"
     },
     title: "Umbenennen"
-  }, "\u270F\uFE0F"), /*#__PURE__*/React.createElement("button", {
+  }, "✏️"), /*#__PURE__*/React.createElement("button", {
     onClick: () => delCategory(id),
     style: {
       ...btn("rgba(239,68,68,0.2)"),
       padding: "0.5rem 0.7rem"
     },
     title: "Kategorie l\xF6schen"
-  }, "\uD83D\uDDD1")))), !addCatOpen ? /*#__PURE__*/React.createElement("button", {
+  }, "🗑")))), !addCatOpen ? /*#__PURE__*/React.createElement("button", {
     onClick: () => setAddCatOpen(true),
     style: {
       ...btn(),
@@ -1031,7 +997,7 @@ function App({
       border: "2px dashed rgba(255,255,255,0.25)",
       fontSize: "1rem"
     }
-  }, "\uFF0B Neue Kategorie") : /*#__PURE__*/React.createElement("div", {
+  }, "＋ Neue Kategorie") : /*#__PURE__*/React.createElement("div", {
     style: {
       background: "rgba(0,0,0,0.45)",
       borderRadius: "12px",
@@ -1044,55 +1010,19 @@ function App({
       gap: "0.5rem",
       marginBottom: "0.5rem"
     }
-  }, /*#__PURE__*/React.createElement("div", {
-    style: {
-      width: 52,
-      height: 42,
-      borderRadius: "6px",
-      border: "1px solid rgba(255,255,255,0.2)",
-      background: "rgba(0,0,0,0.3)",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      fontSize: "1.5rem",
-      flexShrink: 0
-    }
-  }, newIcon), /*#__PURE__*/React.createElement("input", {
+  }, React.createElement("input", {
+    value: newIcon,
+    onChange: e => setNewIcon(e.target.value),
+    placeholder: "📁",
+    style: inp({ width: 52, textAlign: "center", fontSize: "1.3rem" })
+  }), /*#__PURE__*/React.createElement("input", {
     value: newName,
     onChange: e => setNewName(e.target.value),
     placeholder: "Kategoriename",
     style: inp({
       flex: 1
     })
-  })), /*#__PURE__*/React.createElement("div", {
-    style: {
-      display: "flex",
-      flexWrap: "wrap",
-      gap: "4px",
-      marginBottom: "0.6rem",
-      background: "rgba(0,0,0,0.2)",
-      borderRadius: "8px",
-      padding: "6px",
-      maxHeight: "120px",
-      overflowY: "auto"
-    }
-  }, ICON_EMOJIS.map(em => /*#__PURE__*/React.createElement("button", {
-    key: em,
-    onClick: () => setNewIcon(em),
-    style: {
-      width: 34,
-      height: 34,
-      border: newIcon === em ? "2px solid #a855f7" : "2px solid transparent",
-      borderRadius: "6px",
-      background: newIcon === em ? "rgba(168,85,247,0.25)" : "transparent",
-      cursor: "pointer",
-      fontSize: "1.2rem",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: 0
-    }
-  }, em))), /*#__PURE__*/React.createElement("input", {
+  })), /*#__PURE__*/React.createElement("input", {
     value: newFields,
     onChange: e => setNewFields(e.target.value),
     placeholder: "Felder (kommagetrennt): Feld1, Feld2, Feld3",
@@ -1165,7 +1095,7 @@ function App({
   }, /*#__PURE__*/React.createElement("button", {
     onClick: goBack,
     style: btn()
-  }, "\u2190 Zur\xFCck"), /*#__PURE__*/React.createElement("h2", {
+  }, "← Zur\xFCck"), /*#__PURE__*/React.createElement("h2", {
     style: {
       margin: 0,
       fontSize: "1.25rem",
@@ -1188,13 +1118,13 @@ function App({
   }, /*#__PURE__*/React.createElement("button", {
     onClick: () => printCollection(cat, fields, rows, getImgUrl),
     style: btn("linear-gradient(135deg,#f59e0b,#d97706)")
-  }, "\uD83D\uDDA8 Drucken"), /*#__PURE__*/React.createElement("button", {
+  }, "🖨 Drucken"), /*#__PURE__*/React.createElement("button", {
     onClick: exportCSV,
     style: btn("linear-gradient(135deg,#3b82f6,#06b6d4)")
-  }, "\u2B07 CSV"), /*#__PURE__*/React.createElement("button", {
+  }, "⬇ CSV"), /*#__PURE__*/React.createElement("button", {
     onClick: () => csvRef.current?.click(),
     style: btn("linear-gradient(135deg,#6366f1,#8b5cf6)")
-  }, "\u2B06 CSV"), /*#__PURE__*/React.createElement("input", {
+  }, "⬆ CSV"), /*#__PURE__*/React.createElement("input", {
     ref: csvRef,
     type: "file",
     accept: ".csv",
@@ -1212,7 +1142,7 @@ function App({
     }
   }, /*#__PURE__*/React.createElement("input", {
     type: "text",
-    placeholder: "\uD83D\uDD0D Suche  (Ei = exakt \xB7 Ei* = beginnt mit \xB7 *ei = endet mit)",
+    placeholder: "🔍 Suche  (Ei = exakt \xB7 Ei* = beginnt mit \xB7 *ei = endet mit)",
     value: filter,
     onChange: e => setFilter(e.target.value),
     style: inp({
@@ -1230,7 +1160,7 @@ function App({
   }, voice.listening ? "⏹️" : "🎤"), filter && /*#__PURE__*/React.createElement("button", {
     onClick: () => setFilter(""),
     style: btn()
-  }, "\u2715"), /*#__PURE__*/React.createElement("span", {
+  }, "✕"), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: "0.75rem",
       color: "rgba(255,255,255,0.45)",
@@ -1271,7 +1201,7 @@ function App({
       color: "rgba(255,255,255,0.4)",
       textAlign: "center"
     }
-  }, "\uD83D\uDCF7"), /*#__PURE__*/React.createElement("th", {
+  }, "📷"), /*#__PURE__*/React.createElement("th", {
     style: {
       width: 32
     }
@@ -1287,15 +1217,12 @@ function App({
     style: {
       padding: "0.2rem 0.35rem"
     }
-  }, /*#__PURE__*/React.createElement("input", {
+  }, /*#__PURE__*/React.createElement("textarea", {
     value: item[f] || "",
-    onChange: e => cellChange(item.id, f, e.target.value),
+    onChange: e => { cellChange(item.id, f, e.target.value); e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; },
     onBlur: e => saveCell(item.id, f, e.target.value),
-    style: inp({
-      width: "100%",
-      minWidth: 70,
-      padding: "0.35rem 0.45rem"
-    })
+    rows: 1,
+    style: { ...inp({ width: "100%", minWidth: 70, padding: "0.35rem 0.45rem" }), resize: "none", overflow: "hidden", lineHeight: "1.4", fontFamily: "inherit" }
   }))), /*#__PURE__*/React.createElement("td", {
     style: {
       padding: "0.2rem 0.25rem",
@@ -1310,24 +1237,21 @@ function App({
       cursor: "pointer",
       fontSize: "1rem",
       opacity: expandedImgs.has(item.id) ? 1 : 0.5,
-      filter: item.__img1 || item.__img2 ? "none" : "grayscale(1)"
+      filter: item.__img1 || item.__img2 || item.__img3 || item.__img4 ? "none" : "grayscale(1)"
     }
-  }, item.__img1 || item.__img2 ? "🖼️" : "📷")), /*#__PURE__*/React.createElement("td", {
-    style: {
-      padding: "0.2rem 0.25rem",
-      textAlign: "center"
-    }
-  }, /*#__PURE__*/React.createElement("button", {
+  }, item.__img1 || item.__img2 || item.__img3 || item.__img4 ? "🖼️" : "📷")), /*#__PURE__*/React.createElement("td", {
+    style: { padding: "0.2rem 0.25rem", textAlign: "center", whiteSpace: "nowrap" }
+  },
+  React.createElement("button", {
+    onClick: () => copyRow(item.id),
+    style: { background: "transparent", border: "none", color: "rgba(255,255,255,0.5)", cursor: "pointer", fontSize: "1rem", marginRight: "4px" },
+    title: "Eintrag duplizieren"
+  }, "📋"),
+  React.createElement("button", {
     onClick: () => delRow(item.id),
-    style: {
-      background: "transparent",
-      border: "none",
-      color: "rgba(239,68,68,0.7)",
-      cursor: "pointer",
-      fontSize: "1rem"
-    },
-    title: "Zeile l\xF6schen"
-  }, "\uD83D\uDDD1"))), expandedImgs.has(item.id) && /*#__PURE__*/React.createElement("tr", {
+    style: { background: "transparent", border: "none", color: "rgba(239,68,68,0.7)", cursor: "pointer", fontSize: "1rem" },
+    title: "Zeile löschen"
+  }, "🗑"))), expandedImgs.has(item.id) && /*#__PURE__*/React.createElement("tr", {
     style: {
       background: idx % 2 === 0 ? "rgba(139,92,246,0.08)" : "rgba(139,92,246,0.12)",
       borderBottom: "1px solid rgba(255,255,255,0.05)"
@@ -1356,6 +1280,18 @@ function App({
     getImgUrl: getImgUrl,
     onUpload: f => uploadImage(item.id, 2, f),
     onDelete: () => deleteImage(item.id, 2)
+  }), /*#__PURE__*/React.createElement(ImageSlot, {
+    slot: 3,
+    path: item.__img3,
+    getImgUrl: getImgUrl,
+    onUpload: f => uploadImage(item.id, 3, f),
+    onDelete: () => deleteImage(item.id, 3)
+  }), /*#__PURE__*/React.createElement(ImageSlot, {
+    slot: 4,
+    path: item.__img4,
+    getImgUrl: getImgUrl,
+    onUpload: f => uploadImage(item.id, 4, f),
+    onDelete: () => deleteImage(item.id, 4)
   }), /*#__PURE__*/React.createElement("span", {
     style: {
       fontSize: "0.7rem",
@@ -1391,7 +1327,7 @@ function App({
       justifyContent: "center",
       zIndex: 100
     }
-  }, "\uFF0B"));
+  }, "＋"));
 }
 
 // ── Root (Auth wrapper) ───────────────────────────────────────────────────
@@ -1423,7 +1359,7 @@ function Root() {
       justifyContent: "center",
       color: "white"
     }
-  }, "\u2026");
+  }, "…");
   return user ? /*#__PURE__*/React.createElement(App, {
     user: user
   }) : /*#__PURE__*/React.createElement(LoginScreen, null);
