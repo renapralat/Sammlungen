@@ -1220,7 +1220,8 @@ function App({
   }, /*#__PURE__*/React.createElement("textarea", {
     value: item[f] || "",
     onChange: e => { cellChange(item.id, f, e.target.value); e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; },
-    onBlur: e => saveCell(item.id, f, e.target.value),
+    onFocus: e => { e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; e.target.style.resize = "vertical"; e.target.style.overflow = "auto"; },
+    onBlur: e => { saveCell(item.id, f, e.target.value); e.target.style.height = ""; e.target.style.resize = "none"; e.target.style.overflow = "hidden"; },
     rows: 1,
     style: { ...inp({ width: "100%", minWidth: 70, padding: "0.35rem 0.45rem" }), resize: "none", overflow: "hidden", lineHeight: "1.4", fontFamily: "inherit" }
   }))), /*#__PURE__*/React.createElement("td", {
