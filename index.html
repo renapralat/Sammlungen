@@ -4,9 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>📚 Sammlungen</title>
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Segoe UI', system-ui, sans-serif; }
@@ -27,7 +24,9 @@
       Lade…
     </div>
   </div>
-
+  <script src="react.min.js"></script>
+  <script src="react-dom.min.js"></script>
+  <script src="supabase.min.js"></script>
   <script>
 const {
   useState,
@@ -36,67 +35,106 @@ const {
   useCallback
 } = React;
 
+// ── Supabase ──────────────────────────────────────────────────────────────
 const sb = supabase.createClient("https://csyqtynnvoggydofgaua.supabase.co", "sb_publishable_2meBoS5JXmGgJt9MAKq02g_cOWhgSqf");
 const BUCKET = "sammlungen-images";
 
+// ── Voice Hook ────────────────────────────────────────────────────────────
 const useVoice = onResult => {
   const recRef = useRef(null);
   const cbRef = useRef(onResult);
   const [listening, setListening] = useState(false);
   const [supported, setSupported] = useState(false);
-  useEffect(() => { cbRef.current = onResult; });
+  useEffect(() => {
+    cbRef.current = onResult;
+  });
   useEffect(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
     setSupported(true);
     const rec = new SR();
-    rec.lang = "de-DE"; rec.continuous = false; rec.interimResults = false;
+    rec.lang = "de-DE";
+    rec.continuous = false;
+    rec.interimResults = false;
     rec.onresult = e => cbRef.current(e.results[0][0].transcript);
     rec.onerror = () => setListening(false);
     rec.onend = () => setListening(false);
     recRef.current = rec;
-    return () => { try { rec.abort(); } catch (_) {} };
+    return () => {
+      try {
+        rec.abort();
+      } catch (_) {}
+    };
   }, []);
   const start = () => {
     if (!recRef.current || listening) return;
-    try { recRef.current.start(); setListening(true); } catch (_) { setListening(false); }
+    try {
+      recRef.current.start();
+      setListening(true);
+    } catch (_) {
+      setListening(false);
+    }
   };
   const stop = () => {
     if (recRef.current && listening) recRef.current.stop();
     setListening(false);
   };
-  return { listening, supported, start, stop };
+  return {
+    listening,
+    supported,
+    start,
+    stop
+  };
 };
 
-const PALETTE = ["#a855f7","#3b82f6","#f59e0b","#10b981","#ef4444","#ec4899","#06b6d4","#6366f1","#f97316","#84cc16"];
+// ── Constants ─────────────────────────────────────────────────────────────
+const PALETTE = ["#a855f7", "#3b82f6", "#f59e0b", "#10b981", "#ef4444", "#ec4899", "#06b6d4", "#6366f1", "#f97316", "#84cc16"];
 
+// ── CSV helpers ───────────────────────────────────────────────────────────
 const parseCSV = text => {
   const lines = text.replace(/^﻿/, "").split(/\r?\n/).filter(Boolean);
   const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim());
   return lines.slice(1).map(line => {
-    const cells = []; let inQ = false, cell = "";
+    const cells = [];
+    let inQ = false,
+      cell = "";
     for (let i = 0; i < line.length; i++) {
       const c = line[i];
-      if (c === '"' && !inQ) { inQ = true; }
-      else if (c === '"' && inQ && line[i+1] === '"') { cell += '"'; i++; }
-      else if (c === '"' && inQ) { inQ = false; }
-      else if (c === "," && !inQ) { cells.push(cell); cell = ""; }
-      else { cell += c; }
+      if (c === '"' && !inQ) {
+        inQ = true;
+      } else if (c === '"' && inQ && line[i + 1] === '"') {
+        cell += '"';
+        i++;
+      } else if (c === '"' && inQ) {
+        inQ = false;
+      } else if (c === "," && !inQ) {
+        cells.push(cell);
+        cell = "";
+      } else {
+        cell += c;
+      }
     }
     cells.push(cell);
     const row = {};
-    headers.forEach((h, i) => { row[h] = cells[i] || ""; });
+    headers.forEach((h, i) => {
+      row[h] = cells[i] || "";
+    });
     return row;
   });
 };
 const toCSV = (fields, rows) => {
   const header = fields.join(",");
-  const body = rows.map(r => fields.map(f => `"${(r[f]||"").replace(/"/g,'""')}"`).join(","));
+  const body = rows.map(r => fields.map(f => `"${(r[f] || "").replace(/"/g, '""')}"`).join(","));
   return "﻿" + [header, ...body].join("\n");
 };
 
+// ── Print (Tabellenform mit Bildern rechts) ───────────────────────────────
 const printCollection = (cat, fields, rows, getImgUrl) => {
-  const date = new Date().toLocaleDateString("de-DE", { day:"2-digit", month:"long", year:"numeric" });
+  const date = new Date().toLocaleDateString("de-DE", {
+    day: "2-digit",
+    month: "long",
+    year: "numeric"
+  });
   const hasImages = rows.some(r => r.__img1 || r.__img2);
   const win = window.open("", "_blank");
   win.document.write(`<!DOCTYPE html><html lang="de"><head>
@@ -122,13 +160,19 @@ const printCollection = (cat, fields, rows, getImgUrl) => {
         <div class="meta">${rows.length} Einträge &nbsp;·&nbsp; Stand: ${date}</div>
         <table>
           <thead><tr>
-            ${fields.map((f,i)=>`<th class="${i===0?'col-first':''}">${f}</th>`).join("")}
-            ${hasImages?`<th class="col-img">Bilder</th>`:""}
+            ${fields.map((f, i) => `<th class="${i === 0 ? 'col-first' : ''}">${f}</th>`).join("")}
+            ${hasImages ? `<th class="col-img">Bilder</th>` : ""}
           </tr></thead>
           <tbody>
-            ${rows.map(row=>`<tr>
-              ${fields.map((f,i)=>`<td class="${i===0?'col-first':''}">${row[f]||"—"}</td>`).join("")}
-              ${hasImages?`<td class="col-img">${(row.__img1||row.__img2)?`<div class="img-wrap">${row.__img1?`<div><img src="${getImgUrl(row.__img1)}"/><div class="img-label">Bild 1</div></div>`:""} ${row.__img2?`<div><img src="${getImgUrl(row.__img2)}"/><div class="img-label">Bild 2</div></div>`:""}</div>":""}</td>`:""}
+            ${rows.map(row => `<tr>
+              ${fields.map((f, i) => `<td class="${i === 0 ? 'col-first' : ''}">${row[f] || "—"}</td>`).join("")}
+              ${hasImages ? `<td class="col-img">
+                ${row.__img1 || row.__img2 ? `
+                  <div class="img-wrap">
+                    ${row.__img1 ? `<div><img src="${getImgUrl(row.__img1)}" /><div class="img-label">Bild 1</div></div>` : ""}
+                    ${row.__img2 ? `<div><img src="${getImgUrl(row.__img2)}" /><div class="img-label">Bild 2</div></div>` : ""}
+                  </div>` : ""}
+              </td>` : ""}
             </tr>`).join("")}
           </tbody>
         </table>
@@ -137,24 +181,106 @@ const printCollection = (cat, fields, rows, getImgUrl) => {
   setTimeout(() => win.print(), 400);
 };
 
-const BG = { minHeight:"100vh", background:"linear-gradient(135deg,#1e293b 0%,#581c87 50%,#1e293b 100%)", color:"white", padding:"0.5rem" };
-const inp = x => ({ padding:"0.4rem 0.6rem", borderRadius:"6px", border:"1px solid rgba(255,255,255,0.2)", background:"rgba(0,0,0,0.3)", color:"white", fontSize:"0.9rem", ...x });
-const btn = (bg, x) => ({ padding:"0.45rem 0.9rem", border:"none", borderRadius:"8px", background:bg||"rgba(255,255,255,0.1)", color:"white", cursor:"pointer", fontSize:"0.85rem", fontWeight:"600", ...x });
+// ── Styles ────────────────────────────────────────────────────────────────
+const BG = {
+  minHeight: "100vh",
+  background: "linear-gradient(135deg,#1e293b 0%,#581c87 50%,#1e293b 100%)",
+  color: "white",
+  padding: "0.5rem"
+};
+const inp = x => ({
+  padding: "0.4rem 0.6rem",
+  borderRadius: "6px",
+  border: "1px solid rgba(255,255,255,0.2)",
+  background: "rgba(0,0,0,0.3)",
+  color: "white",
+  fontSize: "0.9rem",
+  ...x
+});
+const btn = (bg, x) => ({
+  padding: "0.45rem 0.9rem",
+  border: "none",
+  borderRadius: "8px",
+  background: bg || "rgba(255,255,255,0.1)",
+  color: "white",
+  cursor: "pointer",
+  fontSize: "0.85rem",
+  fontWeight: "600",
+  ...x
+});
 
-function ImageSlot({ slot, path, getImgUrl, onUpload, onDelete }) {
+// ── Image Slot Component ──────────────────────────────────────────────────
+function ImageSlot({
+  slot,
+  path,
+  getImgUrl,
+  onUpload,
+  onDelete
+}) {
   const fileRef = useRef(null);
   const label = slot === 1 ? "Vorderseite · Bild 1" : "Rückseite · Bild 2";
-  return React.createElement("div", { style:{ display:"flex", flexDirection:"column", alignItems:"center", gap:"0.3rem" } },
-    React.createElement("span", { style:{ fontSize:"0.7rem", color:"rgba(255,255,255,0.45)", whiteSpace:"nowrap" } }, label),
-    path
-      ? React.createElement("div", { style:{ position:"relative" } },
-          React.createElement("img", { className:"img-thumb", src:getImgUrl(path), onClick:()=>window.open(getImgUrl(path),"_blank"), title:"Klicken zum Vergrößern" }),
-          React.createElement("button", { onClick:onDelete, title:"Bild entfernen", style:{ position:"absolute", top:-7, right:-7, width:18, height:18, borderRadius:"50%", border:"none", background:"#ef4444", color:"white", cursor:"pointer", fontSize:"0.65rem", lineHeight:1, display:"flex", alignItems:"center", justifyContent:"center" } }, "✕"))
-      : React.createElement(React.Fragment, null,
-          React.createElement("input", { ref:fileRef, type:"file", accept:"image/*", style:{ display:"none" }, onChange:e=>{ const f=e.target.files?.[0]; if(f) onUpload(f); e.target.value=""; } }),
-          React.createElement("button", { className:"img-upload-btn", onClick:()=>fileRef.current?.click(), title:"Bild hochladen" }, "📷")));
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      gap: "0.3rem"
+    }
+  }, /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "0.7rem",
+      color: "rgba(255,255,255,0.45)",
+      whiteSpace: "nowrap"
+    }
+  }, label), path ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      position: "relative"
+    }
+  }, /*#__PURE__*/React.createElement("img", {
+    className: "img-thumb",
+    src: getImgUrl(path),
+    onClick: () => window.open(getImgUrl(path), "_blank"),
+    title: "Klicken zum Vergr\xF6\xDFern"
+  }), /*#__PURE__*/React.createElement("button", {
+    onClick: onDelete,
+    title: "Bild entfernen",
+    style: {
+      position: "absolute",
+      top: -7,
+      right: -7,
+      width: 18,
+      height: 18,
+      borderRadius: "50%",
+      border: "none",
+      background: "#ef4444",
+      color: "white",
+      cursor: "pointer",
+      fontSize: "0.65rem",
+      lineHeight: 1,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    }
+  }, "\u2715")) : /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("input", {
+    ref: fileRef,
+    type: "file",
+    accept: "image/*",
+    style: {
+      display: "none"
+    },
+    onChange: e => {
+      const f = e.target.files?.[0];
+      if (f) onUpload(f);
+      e.target.value = "";
+    }
+  }), /*#__PURE__*/React.createElement("button", {
+    className: "img-upload-btn",
+    onClick: () => fileRef.current?.click(),
+    title: "Bild hochladen"
+  }, "\uD83D\uDCF7")));
 }
 
+// ── Login Screen ──────────────────────────────────────────────────────────
 function LoginScreen() {
   const [tab, setTab] = useState("login");
   const [email, setEmail] = useState("");
@@ -163,32 +289,146 @@ function LoginScreen() {
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
   const login = async e => {
-    e.preventDefault(); setLoading(true); setError("");
-    const { error } = await sb.auth.signInWithPassword({ email, password });
-    if (error) { setError("E-Mail oder Passwort falsch"); setLoading(false); }
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    const {
+      error
+    } = await sb.auth.signInWithPassword({
+      email,
+      password
+    });
+    if (error) {
+      setError("E-Mail oder Passwort falsch");
+      setLoading(false);
+    }
   };
   const register = async e => {
-    e.preventDefault(); setLoading(true); setError("");
-    const { error } = await sb.auth.signUp({ email, password });
-    if (error) { setError(error.message); setLoading(false); }
-    else { setSuccess("✓ Account erstellt – du kannst dich jetzt einloggen!"); setTab("login"); setLoading(false); }
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    const {
+      error
+    } = await sb.auth.signUp({
+      email,
+      password
+    });
+    if (error) {
+      setError(error.message);
+      setLoading(false);
+    } else {
+      setSuccess("✓ Account erstellt – du kannst dich jetzt einloggen!");
+      setTab("login");
+      setLoading(false);
+    }
   };
-  const tabStyle = active => ({ flex:1, padding:"0.5rem", border:"none", cursor:"pointer", fontWeight:"600", fontSize:"0.85rem", background:active?"rgba(139,92,246,0.4)":"transparent", color:active?"white":"rgba(255,255,255,0.5)", borderBottom:active?"2px solid #a855f7":"2px solid transparent" });
-  return React.createElement("div", { style:{ ...BG, display:"flex", alignItems:"center", justifyContent:"center" } },
-    React.createElement("div", { style:{ width:"100%", maxWidth:360, background:"rgba(0,0,0,0.45)", borderRadius:"16px", padding:"2rem" } },
-      React.createElement("h1", { style:{ fontSize:"1.8rem", marginBottom:"1.25rem", background:"linear-gradient(135deg,#fbbf24,#f472b6)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" } }, "📚 Sammlungen"),
-      React.createElement("div", { style:{ display:"flex", marginBottom:"1.25rem", borderBottom:"1px solid rgba(255,255,255,0.15)" } },
-        React.createElement("button", { style:tabStyle(tab==="login"), onClick:()=>{ setTab("login"); setError(""); setSuccess(""); } }, "Einloggen"),
-        React.createElement("button", { style:tabStyle(tab==="signup"), onClick:()=>{ setTab("signup"); setError(""); setSuccess(""); } }, "Registrieren")),
-      success && React.createElement("p", { style:{ fontSize:"0.8rem", color:"#86efac", marginBottom:"0.75rem" } }, success),
-      React.createElement("form", { onSubmit:tab==="login"?login:register, style:{ display:"flex", flexDirection:"column", gap:"0.75rem" } },
-        React.createElement("input", { type:"email", placeholder:"E-Mail", value:email, onChange:e=>setEmail(e.target.value), required:true, style:inp({ width:"100%" }) }),
-        React.createElement("input", { type:"password", placeholder:"Passwort (mind. 6 Zeichen)", value:password, onChange:e=>setPassword(e.target.value), required:true, minLength:6, style:inp({ width:"100%" }) }),
-        error && React.createElement("p", { style:{ fontSize:"0.8rem", color:"#fca5a5" } }, error),
-        React.createElement("button", { type:"submit", disabled:loading, style:btn("linear-gradient(135deg,#a855f7,#6366f1)",{ width:"100%", padding:"0.65rem", opacity:loading?0.7:1 }) }, loading?"…":tab==="login"?"Einloggen":"Account erstellen"))));
+  const tabStyle = active => ({
+    flex: 1,
+    padding: "0.5rem",
+    border: "none",
+    cursor: "pointer",
+    fontWeight: "600",
+    fontSize: "0.85rem",
+    background: active ? "rgba(139,92,246,0.4)" : "transparent",
+    color: active ? "white" : "rgba(255,255,255,0.5)",
+    borderBottom: active ? "2px solid #a855f7" : "2px solid transparent"
+  });
+  return /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...BG,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      width: "100%",
+      maxWidth: 360,
+      background: "rgba(0,0,0,0.45)",
+      borderRadius: "16px",
+      padding: "2rem"
+    }
+  }, /*#__PURE__*/React.createElement("h1", {
+    style: {
+      fontSize: "1.8rem",
+      marginBottom: "1.25rem",
+      background: "linear-gradient(135deg,#fbbf24,#f472b6)",
+      WebkitBackgroundClip: "text",
+      WebkitTextFillColor: "transparent",
+      backgroundClip: "text"
+    }
+  }, "\uD83D\uDCDA Sammlungen"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      marginBottom: "1.25rem",
+      borderBottom: "1px solid rgba(255,255,255,0.15)"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    style: tabStyle(tab === "login"),
+    onClick: () => {
+      setTab("login");
+      setError("");
+      setSuccess("");
+    }
+  }, "Einloggen"), /*#__PURE__*/React.createElement("button", {
+    style: tabStyle(tab === "signup"),
+    onClick: () => {
+      setTab("signup");
+      setError("");
+      setSuccess("");
+    }
+  }, "Registrieren")), success && /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "0.8rem",
+      color: "#86efac",
+      marginBottom: "0.75rem"
+    }
+  }, success), /*#__PURE__*/React.createElement("form", {
+    onSubmit: tab === "login" ? login : register,
+    style: {
+      display: "flex",
+      flexDirection: "column",
+      gap: "0.75rem"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "email",
+    placeholder: "E-Mail",
+    value: email,
+    onChange: e => setEmail(e.target.value),
+    required: true,
+    style: inp({
+      width: "100%"
+    })
+  }), /*#__PURE__*/React.createElement("input", {
+    type: "password",
+    placeholder: "Passwort (mind. 6 Zeichen)",
+    value: password,
+    onChange: e => setPassword(e.target.value),
+    required: true,
+    minLength: 6,
+    style: inp({
+      width: "100%"
+    })
+  }), error && /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "0.8rem",
+      color: "#fca5a5"
+    }
+  }, error), /*#__PURE__*/React.createElement("button", {
+    type: "submit",
+    disabled: loading,
+    style: btn("linear-gradient(135deg,#a855f7,#6366f1)", {
+      width: "100%",
+      padding: "0.65rem",
+      opacity: loading ? 0.7 : 1
+    })
+  }, loading ? "…" : tab === "login" ? "Einloggen" : "Account erstellen"))));
 }
 
-function App({ user }) {
+// ── Main App ──────────────────────────────────────────────────────────────
+function App({
+  user
+}) {
   const [cats, setCats] = useState({});
   const [data, setData] = useState({});
   const [active, setActive] = useState(null);
@@ -209,254 +449,921 @@ function App({ user }) {
   const [editName, setEditName] = useState("");
   const [editIcon, setEditIcon] = useState("");
   const csvRef = useRef(null);
-
-  const flash = (m, ms=2200) => { setMsg(m); setTimeout(()=>setMsg(""), ms); };
+  const flash = (m, ms = 2200) => {
+    setMsg(m);
+    setTimeout(() => setMsg(""), ms);
+  };
   const voice = useVoice(txt => setFilter(txt));
   const cat = active ? cats[active] : null;
   const fields = cat ? cat.fields : [];
-  const rows = active ? (data[active]||[]) : [];
+  const rows = active ? data[active] || [] : [];
 
+  // ── Load ────────────────────────────────────────────────────────────────
   useEffect(() => {
-    setLoading(true); setLoadError(false);
+    setLoading(true);
+    setLoadError(false);
     const load = async () => {
-      const timer = setTimeout(() => { setLoading(false); setLoadError(true); }, 12000);
+      const timer = setTimeout(() => {
+        setLoading(false);
+        setLoadError(true);
+      }, 12000);
       try {
-        const { data: catRows } = await sb.from("categories").select("*").order("created_at");
-        const { data: itemRows } = await sb.from("items").select("*").order("created_at");
+        const {
+          data: catRows
+        } = await sb.from("categories").select("*").order("created_at");
+        const {
+          data: itemRows
+        } = await sb.from("items").select("*").order("created_at");
         clearTimeout(timer);
-        const catMap = {}, dataMap = {};
-        (catRows||[]).forEach(c => { catMap[c.id]={ name:c.name, icon:c.icon, color:c.color, fields:c.fields }; dataMap[c.id]=[]; });
-        (itemRows||[]).forEach(i => { if(dataMap[i.category_id]) dataMap[i.category_id].push({ id:i.id, ...i.data }); });
-        setCats(catMap); setData(dataMap); setLoading(false);
-      } catch(_) { clearTimeout(timer); setLoading(false); setLoadError(true); }
+        const catMap = {},
+          dataMap = {};
+        (catRows || []).forEach(c => {
+          catMap[c.id] = {
+            name: c.name,
+            icon: c.icon,
+            color: c.color,
+            fields: c.fields
+          };
+          dataMap[c.id] = [];
+        });
+        (itemRows || []).forEach(i => {
+          if (dataMap[i.category_id]) dataMap[i.category_id].push({
+            id: i.id,
+            ...i.data
+          });
+        });
+        setCats(catMap);
+        setData(dataMap);
+        setLoading(false);
+      } catch (_) {
+        clearTimeout(timer);
+        setLoading(false);
+        setLoadError(true);
+      }
     };
     load();
   }, [retryCount]);
 
-  const getImgUrl = useCallback(path => { const { data } = sb.storage.from(BUCKET).getPublicUrl(path); return data.publicUrl; }, []);
-  const toggleImgPanel = id => setExpandedImgs(prev => { const next=new Set(prev); if(next.has(id)) next.delete(id); else next.add(id); return next; });
-
+  // ── Image helpers ───────────────────────────────────────────────────────
+  const getImgUrl = useCallback(path => {
+    const {
+      data
+    } = sb.storage.from(BUCKET).getPublicUrl(path);
+    return data.publicUrl;
+  }, []);
+  const toggleImgPanel = id => setExpandedImgs(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id);else next.add(id);
+    return next;
+  });
   const uploadImage = async (itemId, slot, file) => {
     const key = `__img${slot}`;
-    const row = (data[active]||[]).find(r=>r.id===itemId);
+    const row = (data[active] || []).find(r => r.id === itemId);
     if (!row) return;
-    if (row[key]) await sb.storage.from(BUCKET).remove([row[key]]);
-    const ext = file.name.split(".").pop().toLowerCase()||"jpg";
+
+    // Delete old file first (avoids browser-cache showing stale image)
+    if (row[key]) {
+      await sb.storage.from(BUCKET).remove([row[key]]);
+    }
+
+    // Unique filename per upload so browser never serves a cached old version
+    const ext = file.name.split(".").pop().toLowerCase() || "jpg";
     const path = `${user.id}/${itemId}/img${slot}_${Date.now()}.${ext}`;
-    const { error } = await sb.storage.from(BUCKET).upload(path, file);
-    if (error) { flash("✗ Bild-Upload fehlgeschlagen"); return; }
-    const { id:_, ...rowData } = row;
-    await sb.from("items").update({ data:{ ...rowData, [key]:path } }).eq("id", itemId);
-    setData(prev => ({ ...prev, [active]:(prev[active]||[]).map(r=>r.id===itemId?{ ...r,[key]:path }:r) }));
+    const {
+      error
+    } = await sb.storage.from(BUCKET).upload(path, file);
+    if (error) {
+      flash("✗ Bild-Upload fehlgeschlagen");
+      return;
+    }
+    const {
+      id: _,
+      ...rowData
+    } = row;
+    await sb.from("items").update({
+      data: {
+        ...rowData,
+        [key]: path
+      }
+    }).eq("id", itemId);
+    setData(prev => ({
+      ...prev,
+      [active]: (prev[active] || []).map(r => r.id === itemId ? {
+        ...r,
+        [key]: path
+      } : r)
+    }));
     flash("✓ Bild gespeichert");
   };
-
   const deleteImage = async (itemId, slot) => {
-    const row = (data[active]||[]).find(r=>r.id===itemId);
+    const row = (data[active] || []).find(r => r.id === itemId);
     if (!row) return;
     const key = `__img${slot}`;
     const path = row[key];
     if (path) await sb.storage.from(BUCKET).remove([path]);
-    const { id:_, ...rowData } = row;
-    const newData = { ...rowData }; delete newData[key];
-    await sb.from("items").update({ data:newData }).eq("id", itemId);
-    setData(prev => ({ ...prev, [active]:(prev[active]||[]).map(r=>{ if(r.id!==itemId) return r; const nr={...r}; delete nr[key]; return nr; }) }));
+    const {
+      id: _,
+      ...rowData
+    } = row;
+    const newData = {
+      ...rowData
+    };
+    delete newData[key];
+    await sb.from("items").update({
+      data: newData
+    }).eq("id", itemId);
+    setData(prev => ({
+      ...prev,
+      [active]: (prev[active] || []).map(r => {
+        if (r.id !== itemId) return r;
+        const nr = {
+          ...r
+        };
+        delete nr[key];
+        return nr;
+      })
+    }));
     flash("✓ Bild entfernt");
   };
 
+  // ── Filter + Sort ───────────────────────────────────────────────────────
   const visible = (() => {
     let r = rows;
     if (filter.trim()) {
       const terms = filter.toLowerCase().split(" ").filter(Boolean);
       r = r.filter(item => terms.some(term => {
-        const starEnd=term.endsWith("*"), starStart=term.startsWith("*");
-        const core=term.replace(/^\*|\*$/g,"");
+        const starEnd = term.endsWith("*"),
+          starStart = term.startsWith("*");
+        const core = term.replace(/^\*|\*$/g, "");
         return Object.values(item).some(v => {
-          const s=String(v||"").toLowerCase();
-          const words=s.split(/[\s\-,;.!?()\[\]{}'"+]+/);
-          if(starEnd) return words.some(w=>w.startsWith(core));
-          if(starStart) return words.some(w=>w.endsWith(core));
+          const s = String(v || "").toLowerCase();
+          const words = s.split(/[\s\-,;.!?()\[\]{}'"]+/);
+          if (starEnd) return words.some(w => w.startsWith(core));
+          if (starStart) return words.some(w => w.endsWith(core));
           return words.includes(core);
         });
       }));
     }
-    if (sortCol) r=[...r].sort((a,b)=>{ const av=String(a[sortCol]||"").toLowerCase(), bv=String(b[sortCol]||"").toLowerCase(); return sortDir==="asc"?av.localeCompare(bv,"de"):bv.localeCompare(av,"de"); });
+    if (sortCol) {
+      r = [...r].sort((a, b) => {
+        const av = String(a[sortCol] || "").toLowerCase();
+        const bv = String(b[sortCol] || "").toLowerCase();
+        return sortDir === "asc" ? av.localeCompare(bv, "de") : bv.localeCompare(av, "de");
+      });
+    }
     return r;
   })();
+  const handleSort = col => {
+    if (sortCol === col) setSortDir(d => d === "asc" ? "desc" : "asc");else {
+      setSortCol(col);
+      setSortDir("asc");
+    }
+  };
 
-  const handleSort = col => { if(sortCol===col) setSortDir(d=>d==="asc"?"desc":"asc"); else { setSortCol(col); setSortDir("asc"); } };
-
+  // ── Row ops ─────────────────────────────────────────────────────────────
   const addRow = async () => {
-    const emptyData = Object.fromEntries(fields.map(f=>[f,""]));
-    const { data:created } = await sb.from("items").insert([{ category_id:active, user_id:user.id, data:emptyData }]).select();
+    const emptyData = Object.fromEntries(fields.map(f => [f, ""]));
+    const {
+      data: created
+    } = await sb.from("items").insert([{
+      category_id: active,
+      user_id: user.id,
+      data: emptyData
+    }]).select();
     if (!created?.length) return;
-    setData(prev=>({ ...prev, [active]:[{ id:created[0].id, ...emptyData }, ...(prev[active]||[])] }));
+    const newRow = {
+      id: created[0].id,
+      ...emptyData
+    };
+    setData(prev => ({
+      ...prev,
+      [active]: [newRow, ...(prev[active] || [])]
+    }));
     setSortCol(null);
   };
-  const cellChange = (id,field,value) => setData(prev=>({ ...prev, [active]:(prev[active]||[]).map(r=>r.id===id?{ ...r,[field]:value }:r) }));
-  const saveCell = async (id,field,value) => {
-    const row=(data[active]||[]).find(r=>r.id===id); if(!row) return;
-    const { id:_,...rowData }=row;
-    await sb.from("items").update({ data:{ ...rowData,[field]:value } }).eq("id",id);
+  const cellChange = (id, field, value) => setData(prev => ({
+    ...prev,
+    [active]: (prev[active] || []).map(r => r.id === id ? {
+      ...r,
+      [field]: value
+    } : r)
+  }));
+  const saveCell = async (id, field, value) => {
+    const row = (data[active] || []).find(r => r.id === id);
+    if (!row) return;
+    const {
+      id: _,
+      ...rowData
+    } = row;
+    await sb.from("items").update({
+      data: {
+        ...rowData,
+        [field]: value
+      }
+    }).eq("id", id);
   };
   const delRow = async id => {
-    const row=(data[active]||[]).find(r=>r.id===id);
-    if(row){ const toRemove=[row.__img1,row.__img2].filter(Boolean); if(toRemove.length) await sb.storage.from(BUCKET).remove(toRemove); }
-    setData(prev=>({ ...prev, [active]:(prev[active]||[]).filter(r=>r.id!==id) }));
-    await sb.from("items").delete().eq("id",id);
+    // Also delete images from storage
+    const row = (data[active] || []).find(r => r.id === id);
+    if (row) {
+      const toRemove = [row.__img1, row.__img2].filter(Boolean);
+      if (toRemove.length) await sb.storage.from(BUCKET).remove(toRemove);
+    }
+    setData(prev => ({
+      ...prev,
+      [active]: (prev[active] || []).filter(r => r.id !== id)
+    }));
+    await sb.from("items").delete().eq("id", id);
   };
 
+  // ── CSV ─────────────────────────────────────────────────────────────────
   const exportCSV = () => {
-    if(!rows.length){ flash("⚠ Keine Daten"); return; }
-    const blob=new Blob([toCSV(fields,rows)],{ type:"text/csv;charset=utf-8;" });
-    const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=`${cat.name}_${new Date().toISOString().slice(0,10)}.csv`; a.click(); URL.revokeObjectURL(a.href);
+    if (!rows.length) {
+      flash("⚠ Keine Daten");
+      return;
+    }
+    const blob = new Blob([toCSV(fields, rows)], {
+      type: "text/csv;charset=utf-8;"
+    });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `${cat.name}_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
     flash("✓ CSV exportiert");
   };
   const importCSV = async e => {
-    const file=e.target.files?.[0]; if(!file) return;
-    const reader=new FileReader();
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
     reader.onload = async ev => {
       try {
-        const newRows=parseCSV(ev.target.result);
-        const { data:created }=await sb.from("items").insert(newRows.map(r=>({ category_id:active, user_id:user.id, data:r }))).select();
-        const mapped=(created||[]).map(i=>({ id:i.id,...i.data }));
-        setData(prev=>({ ...prev, [active]:[...(prev[active]||[]),...mapped] }));
+        const newRows = parseCSV(ev.target.result);
+        const toInsert = newRows.map(r => ({
+          category_id: active,
+          user_id: user.id,
+          data: r
+        }));
+        const {
+          data: created
+        } = await sb.from("items").insert(toInsert).select();
+        const mapped = (created || []).map(i => ({
+          id: i.id,
+          ...i.data
+        }));
+        setData(prev => ({
+          ...prev,
+          [active]: [...(prev[active] || []), ...mapped]
+        }));
         flash(`✓ ${mapped.length} Zeilen importiert`);
-      } catch { flash("✗ Import-Fehler"); }
+      } catch {
+        flash("✗ Import-Fehler");
+      }
     };
-    reader.readAsText(file,"UTF-8"); e.target.value="";
+    reader.readAsText(file, "UTF-8");
+    e.target.value = "";
   };
 
+  // ── Categories ──────────────────────────────────────────────────────────
   const addCategory = async () => {
-    const name=newName.trim(); if(!name){ flash("⚠ Name fehlt"); return; }
-    const fs=newFields.split(",").map(f=>f.trim()).filter(Boolean); if(!fs.length){ flash("⚠ Mindestens ein Feld angeben"); return; }
-    const { data:created }=await sb.from("categories").insert([{ user_id:user.id, name, icon:newIcon, color:newColor, fields:fs }]).select();
-    if(!created?.length) return;
-    const id=created[0].id;
-    setCats(prev=>({ ...prev, [id]:{ name, icon:newIcon, color:newColor, fields:fs } }));
-    setData(prev=>({ ...prev, [id]:[] }));
-    setNewName(""); setNewIcon("📁"); setNewFields(""); setNewColor(PALETTE[3]);
-    setAddCatOpen(false); flash("✓ Kategorie erstellt");
+    const name = newName.trim();
+    if (!name) {
+      flash("⚠ Name fehlt");
+      return;
+    }
+    const fs = newFields.split(",").map(f => f.trim()).filter(Boolean);
+    if (!fs.length) {
+      flash("⚠ Mindestens ein Feld angeben");
+      return;
+    }
+    const {
+      data: created
+    } = await sb.from("categories").insert([{
+      user_id: user.id,
+      name,
+      icon: newIcon,
+      color: newColor,
+      fields: fs
+    }]).select();
+    if (!created?.length) return;
+    const id = created[0].id;
+    setCats(prev => ({
+      ...prev,
+      [id]: {
+        name,
+        icon: newIcon,
+        color: newColor,
+        fields: fs
+      }
+    }));
+    setData(prev => ({
+      ...prev,
+      [id]: []
+    }));
+    setNewName("");
+    setNewIcon("📁");
+    setNewFields("");
+    setNewColor(PALETTE[3]);
+    setAddCatOpen(false);
+    flash("✓ Kategorie erstellt");
   };
   const delCategory = async id => {
-    if(!window.confirm(`Kategorie "${cats[id].name}" wirklich löschen? Alle Daten gehen verloren.`)) return;
-    await sb.from("categories").delete().eq("id",id);
-    setCats(prev=>{ const n={...prev}; delete n[id]; return n; });
-    setData(prev=>{ const n={...prev}; delete n[id]; return n; });
-    if(active===id) setActive(null);
+    if (!window.confirm(`Kategorie "${cats[id].name}" wirklich löschen? Alle Daten gehen verloren.`)) return;
+    await sb.from("categories").delete().eq("id", id);
+    setCats(prev => {
+      const n = {
+        ...prev
+      };
+      delete n[id];
+      return n;
+    });
+    setData(prev => {
+      const n = {
+        ...prev
+      };
+      delete n[id];
+      return n;
+    });
+    if (active === id) setActive(null);
   };
-  const startEdit = id => { setEditingCat(id); setEditName(cats[id].name); setEditIcon(cats[id].icon); };
+  const startEdit = id => {
+    setEditingCat(id);
+    setEditName(cats[id].name);
+    setEditIcon(cats[id].icon);
+  };
   const saveCategory = async id => {
-    const name=editName.trim(); if(!name) return;
-    const icon=editIcon.trim()||cats[id].icon;
-    await sb.from("categories").update({ name, icon }).eq("id",id);
-    setCats(prev=>({ ...prev, [id]:{ ...prev[id], name, icon } }));
-    setEditingCat(null); flash("✓ Kategorie gespeichert");
+    const name = editName.trim();
+    if (!name) return;
+    const icon = editIcon.trim() || cats[id].icon;
+    await sb.from("categories").update({
+      name,
+      icon
+    }).eq("id", id);
+    setCats(prev => ({
+      ...prev,
+      [id]: {
+        ...prev[id],
+        name,
+        icon
+      }
+    }));
+    setEditingCat(null);
+    flash("✓ Kategorie gespeichert");
   };
-  const goBack = () => { setActive(null); setFilter(""); setSortCol(null); setExpandedImgs(new Set()); };
+  const goBack = () => {
+    setActive(null);
+    setFilter("");
+    setSortCol(null);
+    setExpandedImgs(new Set());
+  };
+  if (loading) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...BG,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "0.75rem"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "1.1rem"
+    }
+  }, "Lade Daten\u2026"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "0.75rem",
+      color: "rgba(255,255,255,0.4)"
+    }
+  }, "Beim ersten Aufruf kann es 10\u201320 Sek. dauern."));
+  if (loadError) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      ...BG,
+      display: "flex",
+      flexDirection: "column",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: "1rem",
+      textAlign: "center",
+      padding: "2rem"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "2rem"
+    }
+  }, "\u26A0\uFE0F"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "1rem"
+    }
+  }, "Verbindung fehlgeschlagen"), /*#__PURE__*/React.createElement("div", {
+    style: {
+      fontSize: "0.8rem",
+      color: "rgba(255,255,255,0.5)",
+      maxWidth: 320
+    }
+  }, "Der Server antwortet nicht. Bitte kurz warten und erneut versuchen."), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setRetryCount(c => c + 1),
+    style: btn("linear-gradient(135deg,#a855f7,#6366f1)", {
+      padding: "0.65rem 1.5rem",
+      fontSize: "1rem"
+    })
+  }, "\uD83D\uDD04 Erneut versuchen"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => sb.auth.signOut(),
+    style: btn("rgba(255,255,255,0.1)", {
+      fontSize: "0.8rem"
+    })
+  }, "Ausloggen"));
 
-  if (loading) return React.createElement("div", { style:{ ...BG, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"0.75rem" } },
-    React.createElement("div", { style:{ fontSize:"1.1rem" } }, "Lade Daten…"),
-    React.createElement("div", { style:{ fontSize:"0.75rem", color:"rgba(255,255,255,0.4)" } }, "Beim ersten Aufruf kann es 10–20 Sek. dauern."));
+  // ════ CATEGORY LIST ════════════════════════════════════════════════════
+  if (!active) return /*#__PURE__*/React.createElement("div", {
+    style: BG
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: 480,
+      margin: "0 auto",
+      paddingTop: "2.5rem"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      marginBottom: "0.25rem"
+    }
+  }, /*#__PURE__*/React.createElement("h1", {
+    style: {
+      fontSize: "2rem",
+      background: "linear-gradient(135deg,#fbbf24,#f472b6)",
+      WebkitBackgroundClip: "text",
+      WebkitTextFillColor: "transparent",
+      backgroundClip: "text"
+    }
+  }, "\uD83D\uDCDA Sammlungen"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => sb.auth.signOut(),
+    style: btn("rgba(239,68,68,0.2)", {
+      fontSize: "0.75rem",
+      padding: "0.3rem 0.6rem"
+    })
+  }, "\u238B Logout")), /*#__PURE__*/React.createElement("p", {
+    style: {
+      fontSize: "0.75rem",
+      color: "rgba(255,255,255,0.4)",
+      marginBottom: "1.5rem"
+    }
+  }, user.email), Object.entries(cats).map(([id, c]) => /*#__PURE__*/React.createElement("div", {
+    key: id,
+    style: {
+      marginBottom: "0.6rem"
+    }
+  }, editingCat === id ? /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(0,0,0,0.45)",
+      borderRadius: "12px",
+      padding: "0.75rem"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "0.5rem",
+      marginBottom: "0.5rem"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    value: editIcon,
+    onChange: e => setEditIcon(e.target.value),
+    style: inp({
+      width: 52,
+      textAlign: "center",
+      fontSize: "1.3rem"
+    })
+  }), /*#__PURE__*/React.createElement("input", {
+    value: editName,
+    onChange: e => setEditName(e.target.value),
+    style: inp({
+      flex: 1
+    })
+  })), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "0.5rem"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => saveCategory(id),
+    style: btn("linear-gradient(135deg,#10b981,#059669)")
+  }, "Speichern"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setEditingCat(null),
+    style: btn()
+  }, "Abbrechen"))) : /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "0.5rem"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => setActive(id),
+    style: {
+      ...btn(null),
+      flex: 1,
+      padding: "1.1rem",
+      fontSize: "1.05rem",
+      textAlign: "left",
+      background: `linear-gradient(135deg, ${c.color}, ${c.color}99)`
+    }
+  }, c.icon, " ", c.name, /*#__PURE__*/React.createElement("span", {
+    style: {
+      float: "right",
+      fontSize: "0.75rem",
+      opacity: 0.6
+    }
+  }, data[id]?.length || 0, " Eintr\xE4ge")), /*#__PURE__*/React.createElement("button", {
+    onClick: () => startEdit(id),
+    style: {
+      ...btn("rgba(255,255,255,0.1)"),
+      padding: "0.5rem 0.7rem"
+    },
+    title: "Umbenennen"
+  }, "\u270F\uFE0F"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => delCategory(id),
+    style: {
+      ...btn("rgba(239,68,68,0.2)"),
+      padding: "0.5rem 0.7rem"
+    },
+    title: "Kategorie l\xF6schen"
+  }, "\uD83D\uDDD1")))), !addCatOpen ? /*#__PURE__*/React.createElement("button", {
+    onClick: () => setAddCatOpen(true),
+    style: {
+      ...btn(),
+      width: "100%",
+      padding: "0.9rem",
+      marginTop: "0.5rem",
+      border: "2px dashed rgba(255,255,255,0.25)",
+      fontSize: "1rem"
+    }
+  }, "\uFF0B Neue Kategorie") : /*#__PURE__*/React.createElement("div", {
+    style: {
+      background: "rgba(0,0,0,0.45)",
+      borderRadius: "12px",
+      padding: "1rem",
+      marginTop: "0.5rem"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "0.5rem",
+      marginBottom: "0.5rem"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    value: newIcon,
+    onChange: e => setNewIcon(e.target.value),
+    placeholder: "\uD83C\uDFF7",
+    style: inp({
+      width: 52,
+      textAlign: "center",
+      fontSize: "1.3rem"
+    })
+  }), /*#__PURE__*/React.createElement("input", {
+    value: newName,
+    onChange: e => setNewName(e.target.value),
+    placeholder: "Kategoriename",
+    style: inp({
+      flex: 1
+    })
+  })), /*#__PURE__*/React.createElement("input", {
+    value: newFields,
+    onChange: e => setNewFields(e.target.value),
+    placeholder: "Felder (kommagetrennt): Feld1, Feld2, Feld3",
+    style: inp({
+      width: "100%",
+      marginBottom: "0.5rem"
+    })
+  }), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "6px",
+      marginBottom: "0.75rem",
+      flexWrap: "wrap"
+    }
+  }, PALETTE.map(c => /*#__PURE__*/React.createElement("div", {
+    key: c,
+    onClick: () => setNewColor(c),
+    style: {
+      width: 24,
+      height: 24,
+      borderRadius: "50%",
+      background: c,
+      cursor: "pointer",
+      border: newColor === c ? "3px solid white" : "3px solid transparent",
+      boxSizing: "border-box"
+    }
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "0.5rem"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: addCategory,
+    style: btn("linear-gradient(135deg,#10b981,#059669)")
+  }, "Erstellen"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => setAddCatOpen(false),
+    style: btn()
+  }, "Abbrechen"))), msg && /*#__PURE__*/React.createElement("p", {
+    style: {
+      marginTop: "1rem",
+      fontSize: "0.85rem",
+      color: msg.startsWith("✓") ? "#86efac" : "#fca5a5"
+    }
+  }, msg)));
 
-  if (loadError) return React.createElement("div", { style:{ ...BG, display:"flex", flexDirection:"column", alignItems:"center", justifyContent:"center", gap:"1rem", textAlign:"center", padding:"2rem" } },
-    React.createElement("div", { style:{ fontSize:"2rem" } }, "⚠️"),
-    React.createElement("div", { style:{ fontSize:"1rem" } }, "Verbindung fehlgeschlagen"),
-    React.createElement("div", { style:{ fontSize:"0.8rem", color:"rgba(255,255,255,0.5)", maxWidth:320 } }, "Der Server antwortet nicht. Bitte kurz warten und erneut versuchen."),
-    React.createElement("button", { onClick:()=>setRetryCount(c=>c+1), style:btn("linear-gradient(135deg,#a855f7,#6366f1)",{ padding:"0.65rem 1.5rem", fontSize:"1rem" }) }, "🔄 Erneut versuchen"),
-    React.createElement("button", { onClick:()=>sb.auth.signOut(), style:btn("rgba(255,255,255,0.1)",{ fontSize:"0.8rem" }) }, "Ausloggen"));
-
-  if (!active) return React.createElement("div", { style:BG },
-    React.createElement("div", { style:{ maxWidth:480, margin:"0 auto", paddingTop:"2.5rem" } },
-      React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:"0.25rem" } },
-        React.createElement("h1", { style:{ fontSize:"2rem", background:"linear-gradient(135deg,#fbbf24,#f472b6)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" } }, "📚 Sammlungen"),
-        React.createElement("button", { onClick:()=>sb.auth.signOut(), style:btn("rgba(239,68,68,0.2)",{ fontSize:"0.75rem", padding:"0.3rem 0.6rem" }) }, "⎋ Logout")),
-      React.createElement("p", { style:{ fontSize:"0.75rem", color:"rgba(255,255,255,0.4)", marginBottom:"1.5rem" } }, user.email),
-      Object.entries(cats).map(([id,c]) => React.createElement("div", { key:id, style:{ marginBottom:"0.6rem" } },
-        editingCat===id
-          ? React.createElement("div", { style:{ background:"rgba(0,0,0,0.45)", borderRadius:"12px", padding:"0.75rem" } },
-              React.createElement("div", { style:{ display:"flex", gap:"0.5rem", marginBottom:"0.5rem" } },
-                React.createElement("input", { value:editIcon, onChange:e=>setEditIcon(e.target.value), style:inp({ width:52, textAlign:"center", fontSize:"1.3rem" }) }),
-                React.createElement("input", { value:editName, onChange:e=>setEditName(e.target.value), style:inp({ flex:1 }) })),
-              React.createElement("div", { style:{ display:"flex", gap:"0.5rem" } },
-                React.createElement("button", { onClick:()=>saveCategory(id), style:btn("linear-gradient(135deg,#10b981,#059669)") }, "Speichern"),
-                React.createElement("button", { onClick:()=>setEditingCat(null), style:btn() }, "Abbrechen")))
-          : React.createElement("div", { style:{ display:"flex", gap:"0.5rem" } },
-              React.createElement("button", { onClick:()=>setActive(id), style:{ ...btn(null), flex:1, padding:"1.1rem", fontSize:"1.05rem", textAlign:"left", background:`linear-gradient(135deg,${c.color},${c.color}99)` } },
-                c.icon," ",c.name,
-                React.createElement("span", { style:{ float:"right", fontSize:"0.75rem", opacity:0.6 } }, (data[id]?.length||0)," Einträge")),
-              React.createElement("button", { onClick:()=>startEdit(id), style:{ ...btn("rgba(255,255,255,0.1)"), padding:"0.5rem 0.7rem" }, title:"Umbenennen" }, "✏️"),
-              React.createElement("button", { onClick:()=>delCategory(id), style:{ ...btn("rgba(239,68,68,0.2)"), padding:"0.5rem 0.7rem" }, title:"Kategorie löschen" }, "🗑")))),
-      !addCatOpen
-        ? React.createElement("button", { onClick:()=>setAddCatOpen(true), style:{ ...btn(), width:"100%", padding:"0.9rem", marginTop:"0.5rem", border:"2px dashed rgba(255,255,255,0.25)", fontSize:"1rem" } }, "＋ Neue Kategorie")
-        : React.createElement("div", { style:{ background:"rgba(0,0,0,0.45)", borderRadius:"12px", padding:"1rem", marginTop:"0.5rem" } },
-            React.createElement("div", { style:{ display:"flex", gap:"0.5rem", marginBottom:"0.5rem" } },
-              React.createElement("input", { value:newIcon, onChange:e=>setNewIcon(e.target.value), placeholder:"🏷", style:inp({ width:52, textAlign:"center", fontSize:"1.3rem" }) }),
-              React.createElement("input", { value:newName, onChange:e=>setNewName(e.target.value), placeholder:"Kategoriename", style:inp({ flex:1 }) })),
-            React.createElement("input", { value:newFields, onChange:e=>setNewFields(e.target.value), placeholder:"Felder (kommagetrennt): Feld1, Feld2, Feld3", style:inp({ width:"100%", marginBottom:"0.5rem" }) }),
-            React.createElement("div", { style:{ display:"flex", gap:"6px", marginBottom:"0.75rem", flexWrap:"wrap" } },
-              PALETTE.map(c=>React.createElement("div", { key:c, onClick:()=>setNewColor(c), style:{ width:24, height:24, borderRadius:"50%", background:c, cursor:"pointer", border:newColor===c?"3px solid white":"3px solid transparent", boxSizing:"border-box" } }))),
-            React.createElement("div", { style:{ display:"flex", gap:"0.5rem" } },
-              React.createElement("button", { onClick:addCategory, style:btn("linear-gradient(135deg,#10b981,#059669)") }, "Erstellen"),
-              React.createElement("button", { onClick:()=>setAddCatOpen(false), style:btn() }, "Abbrechen"))),
-      msg && React.createElement("p", { style:{ marginTop:"1rem", fontSize:"0.85rem", color:msg.startsWith("✓")?"#86efac":"#fca5a5" } }, msg)));
-
-  return React.createElement("div", { style:BG },
-    React.createElement("div", { style:{ maxWidth:1600, margin:"0 auto", paddingBottom:"5rem" } },
-      React.createElement("div", { style:{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:"0.75rem", flexWrap:"wrap", gap:"0.5rem" } },
-        React.createElement("div", { style:{ display:"flex", alignItems:"center", gap:"0.6rem" } },
-          React.createElement("button", { onClick:goBack, style:btn() }, "← Zurück"),
-          React.createElement("h2", { style:{ margin:0, fontSize:"1.25rem", background:"linear-gradient(135deg,#fbbf24,#f472b6)", WebkitBackgroundClip:"text", WebkitTextFillColor:"transparent", backgroundClip:"text" } }, cat.icon," ",cat.name),
-          msg && React.createElement("span", { style:{ fontSize:"0.75rem", color:msg.startsWith("✓")?"#86efac":"#fca5a5" } }, msg)),
-        React.createElement("div", { style:{ display:"flex", gap:"0.4rem", flexWrap:"wrap" } },
-          React.createElement("button", { onClick:()=>printCollection(cat,fields,rows,getImgUrl), style:btn("linear-gradient(135deg,#f59e0b,#d97706)") }, "🖨 Drucken"),
-          React.createElement("button", { onClick:exportCSV, style:btn("linear-gradient(135deg,#3b82f6,#06b6d4)") }, "⬇ CSV"),
-          React.createElement("button", { onClick:()=>csvRef.current?.click(), style:btn("linear-gradient(135deg,#6366f1,#8b5cf6)") }, "⬆ CSV"),
-          React.createElement("input", { ref:csvRef, type:"file", accept:".csv", onChange:importCSV, style:{ display:"none" } }))),
-      React.createElement("div", { style:{ display:"flex", gap:"0.4rem", alignItems:"center", marginBottom:"0.75rem", flexWrap:"wrap" } },
-        React.createElement("input", { type:"text", placeholder:"🔍 Suche  (Ei = exakt · Ei* = beginnt mit · *ei = endet mit)", value:filter, onChange:e=>setFilter(e.target.value), style:inp({ flex:1, maxWidth:400 }) }),
-        voice.supported && React.createElement("button", { onClick:()=>voice.listening?voice.stop():voice.start(), title:voice.listening?"Aufnahme stoppen":"Spracheingabe (Deutsch)", style:btn(voice.listening?"linear-gradient(135deg,#ef4444,#dc2626)":"linear-gradient(135deg,#6366f1,#8b5cf6)",{ minWidth:44, minHeight:40, fontSize:"1.1rem" }) }, voice.listening?"⏹️":"🎤"),
-        filter && React.createElement("button", { onClick:()=>setFilter(""), style:btn() }, "✕"),
-        React.createElement("span", { style:{ fontSize:"0.75rem", color:"rgba(255,255,255,0.45)", marginLeft:"0.25rem" } }, visible.length," / ",rows.length)),
-      React.createElement("div", { style:{ overflowX:"auto" } },
-        React.createElement("table", { style:{ width:"100%", borderCollapse:"collapse", background:"rgba(0,0,0,0.3)", borderRadius:"10px", overflow:"hidden" } },
-          React.createElement("thead", null, React.createElement("tr", { style:{ background:"rgba(0,0,0,0.45)" } },
-            fields.map(f=>React.createElement("th", { key:f, onClick:()=>handleSort(f), style:{ padding:"0.65rem 0.6rem", textAlign:"left", cursor:"pointer", userSelect:"none", fontSize:"0.8rem", color:sortCol===f?"#fbbf24":"rgba(255,255,255,0.65)", whiteSpace:"nowrap" } }, f," ",sortCol===f?(sortDir==="asc"?"↑":"↓"):"⇅")),
-            React.createElement("th", { style:{ width:32, fontSize:"0.75rem", color:"rgba(255,255,255,0.4)", textAlign:"center" } }, "📷"),
-            React.createElement("th", { style:{ width:32 } }))),
-          React.createElement("tbody", null,
-            visible.map((item,idx)=>React.createElement(React.Fragment, { key:item.id },
-              React.createElement("tr", { style:{ background:idx%2===0?"rgba(255,255,255,0.03)":"rgba(255,255,255,0.065)", borderBottom:expandedImgs.has(item.id)?"none":"1px solid rgba(255,255,255,0.05)" } },
-                fields.map(f=>React.createElement("td", { key:f, style:{ padding:"0.2rem 0.35rem" } },
-                  React.createElement("input", { value:item[f]||"", onChange:e=>cellChange(item.id,f,e.target.value), onBlur:e=>saveCell(item.id,f,e.target.value), style:inp({ width:"100%", minWidth:70, padding:"0.35rem 0.45rem" }) }))),
-                React.createElement("td", { style:{ padding:"0.2rem 0.25rem", textAlign:"center" } },
-                  React.createElement("button", { onClick:()=>toggleImgPanel(item.id), title:expandedImgs.has(item.id)?"Bilder ausblenden":"Bilder anzeigen / hochladen", style:{ background:"transparent", border:"none", cursor:"pointer", fontSize:"1rem", opacity:expandedImgs.has(item.id)?1:0.5, filter:(item.__img1||item.__img2)?"none":"grayscale(1)" } }, (item.__img1||item.__img2)?"🖼️":"📷")),
-                React.createElement("td", { style:{ padding:"0.2rem 0.25rem", textAlign:"center" } },
-                  React.createElement("button", { onClick:()=>delRow(item.id), style:{ background:"transparent", border:"none", color:"rgba(239,68,68,0.7)", cursor:"pointer", fontSize:"1rem" }, title:"Zeile löschen" }, "🗑"))),
-              expandedImgs.has(item.id) && React.createElement("tr", { style:{ background:idx%2===0?"rgba(139,92,246,0.08)":"rgba(139,92,246,0.12)", borderBottom:"1px solid rgba(255,255,255,0.05)" } },
-                React.createElement("td", { colSpan:fields.length+2, style:{ padding:"0.6rem 0.8rem" } },
-                  React.createElement("div", { style:{ display:"flex", gap:"1.25rem", alignItems:"flex-start", flexWrap:"wrap" } },
-                    React.createElement(ImageSlot, { slot:1, path:item.__img1, getImgUrl, onUpload:f=>uploadImage(item.id,1,f), onDelete:()=>deleteImage(item.id,1) }),
-                    React.createElement(ImageSlot, { slot:2, path:item.__img2, getImgUrl, onUpload:f=>uploadImage(item.id,2,f), onDelete:()=>deleteImage(item.id,2) }),
-                    React.createElement("span", { style:{ fontSize:"0.7rem", color:"rgba(255,255,255,0.3)", alignSelf:"flex-end", paddingBottom:"0.2rem" } }, "Klick auf Bild zum Vergrößern")))))),
-            visible.length===0 && React.createElement("tr", null, React.createElement("td", { colSpan:fields.length+2, style:{ padding:"2.5rem", textAlign:"center", color:"rgba(255,255,255,0.35)" } }, filter?"Keine Treffer für diese Suche":"Noch leer – ＋ unten rechts drücken")))))),
-    React.createElement("button", { onClick:addRow, title:"Neue Zeile hinzufügen", style:{ position:"fixed", bottom:"1.5rem", right:"1.5rem", width:58, height:58, borderRadius:"50%", border:"none", background:"linear-gradient(135deg,#10b981,#059669)", color:"white", fontSize:"2rem", cursor:"pointer", boxShadow:"0 4px 24px rgba(0,0,0,0.5)", display:"flex", alignItems:"center", justifyContent:"center", zIndex:100 } }, "＋"));
+  // ════ COLLECTION VIEW ══════════════════════════════════════════════════
+  return /*#__PURE__*/React.createElement("div", {
+    style: BG
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      maxWidth: 1600,
+      margin: "0 auto",
+      paddingBottom: "5rem"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: "0.75rem",
+      flexWrap: "wrap",
+      gap: "0.5rem"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      alignItems: "center",
+      gap: "0.6rem"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: goBack,
+    style: btn()
+  }, "\u2190 Zur\xFCck"), /*#__PURE__*/React.createElement("h2", {
+    style: {
+      margin: 0,
+      fontSize: "1.25rem",
+      background: "linear-gradient(135deg,#fbbf24,#f472b6)",
+      WebkitBackgroundClip: "text",
+      WebkitTextFillColor: "transparent",
+      backgroundClip: "text"
+    }
+  }, cat.icon, " ", cat.name), msg && /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "0.75rem",
+      color: msg.startsWith("✓") ? "#86efac" : "#fca5a5"
+    }
+  }, msg)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "0.4rem",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => printCollection(cat, fields, rows, getImgUrl),
+    style: btn("linear-gradient(135deg,#f59e0b,#d97706)")
+  }, "\uD83D\uDDA8 Drucken"), /*#__PURE__*/React.createElement("button", {
+    onClick: exportCSV,
+    style: btn("linear-gradient(135deg,#3b82f6,#06b6d4)")
+  }, "\u2B07 CSV"), /*#__PURE__*/React.createElement("button", {
+    onClick: () => csvRef.current?.click(),
+    style: btn("linear-gradient(135deg,#6366f1,#8b5cf6)")
+  }, "\u2B06 CSV"), /*#__PURE__*/React.createElement("input", {
+    ref: csvRef,
+    type: "file",
+    accept: ".csv",
+    onChange: importCSV,
+    style: {
+      display: "none"
+    }
+  }))), /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "0.4rem",
+      alignItems: "center",
+      marginBottom: "0.75rem",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    type: "text",
+    placeholder: "\uD83D\uDD0D Suche  (Ei = exakt \xB7 Ei* = beginnt mit \xB7 *ei = endet mit)",
+    value: filter,
+    onChange: e => setFilter(e.target.value),
+    style: inp({
+      flex: 1,
+      maxWidth: 400
+    })
+  }), voice.supported && /*#__PURE__*/React.createElement("button", {
+    onClick: () => voice.listening ? voice.stop() : voice.start(),
+    title: voice.listening ? "Aufnahme stoppen" : "Spracheingabe (Deutsch)",
+    style: btn(voice.listening ? "linear-gradient(135deg,#ef4444,#dc2626)" : "linear-gradient(135deg,#6366f1,#8b5cf6)", {
+      minWidth: 44,
+      minHeight: 40,
+      fontSize: "1.1rem"
+    })
+  }, voice.listening ? "⏹️" : "🎤"), filter && /*#__PURE__*/React.createElement("button", {
+    onClick: () => setFilter(""),
+    style: btn()
+  }, "\u2715"), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "0.75rem",
+      color: "rgba(255,255,255,0.45)",
+      marginLeft: "0.25rem"
+    }
+  }, visible.length, " / ", rows.length)), /*#__PURE__*/React.createElement("div", {
+    style: {
+      overflowX: "auto"
+    }
+  }, /*#__PURE__*/React.createElement("table", {
+    style: {
+      width: "100%",
+      borderCollapse: "collapse",
+      background: "rgba(0,0,0,0.3)",
+      borderRadius: "10px",
+      overflow: "hidden"
+    }
+  }, /*#__PURE__*/React.createElement("thead", null, /*#__PURE__*/React.createElement("tr", {
+    style: {
+      background: "rgba(0,0,0,0.45)"
+    }
+  }, fields.map(f => /*#__PURE__*/React.createElement("th", {
+    key: f,
+    onClick: () => handleSort(f),
+    style: {
+      padding: "0.65rem 0.6rem",
+      textAlign: "left",
+      cursor: "pointer",
+      userSelect: "none",
+      fontSize: "0.8rem",
+      color: sortCol === f ? "#fbbf24" : "rgba(255,255,255,0.65)",
+      whiteSpace: "nowrap"
+    }
+  }, f, "\xA0", sortCol === f ? sortDir === "asc" ? "↑" : "↓" : "⇅")), /*#__PURE__*/React.createElement("th", {
+    style: {
+      width: 32,
+      fontSize: "0.75rem",
+      color: "rgba(255,255,255,0.4)",
+      textAlign: "center"
+    }
+  }, "\uD83D\uDCF7"), /*#__PURE__*/React.createElement("th", {
+    style: {
+      width: 32
+    }
+  }))), /*#__PURE__*/React.createElement("tbody", null, visible.map((item, idx) => /*#__PURE__*/React.createElement(React.Fragment, {
+    key: item.id
+  }, /*#__PURE__*/React.createElement("tr", {
+    style: {
+      background: idx % 2 === 0 ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.065)",
+      borderBottom: expandedImgs.has(item.id) ? "none" : "1px solid rgba(255,255,255,0.05)"
+    }
+  }, fields.map(f => /*#__PURE__*/React.createElement("td", {
+    key: f,
+    style: {
+      padding: "0.2rem 0.35rem"
+    }
+  }, /*#__PURE__*/React.createElement("input", {
+    value: item[f] || "",
+    onChange: e => cellChange(item.id, f, e.target.value),
+    onBlur: e => saveCell(item.id, f, e.target.value),
+    style: inp({
+      width: "100%",
+      minWidth: 70,
+      padding: "0.35rem 0.45rem"
+    })
+  }))), /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "0.2rem 0.25rem",
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => toggleImgPanel(item.id),
+    title: expandedImgs.has(item.id) ? "Bilder ausblenden" : "Bilder anzeigen / hochladen",
+    style: {
+      background: "transparent",
+      border: "none",
+      cursor: "pointer",
+      fontSize: "1rem",
+      opacity: expandedImgs.has(item.id) ? 1 : 0.5,
+      filter: item.__img1 || item.__img2 ? "none" : "grayscale(1)"
+    }
+  }, item.__img1 || item.__img2 ? "🖼️" : "📷")), /*#__PURE__*/React.createElement("td", {
+    style: {
+      padding: "0.2rem 0.25rem",
+      textAlign: "center"
+    }
+  }, /*#__PURE__*/React.createElement("button", {
+    onClick: () => delRow(item.id),
+    style: {
+      background: "transparent",
+      border: "none",
+      color: "rgba(239,68,68,0.7)",
+      cursor: "pointer",
+      fontSize: "1rem"
+    },
+    title: "Zeile l\xF6schen"
+  }, "\uD83D\uDDD1"))), expandedImgs.has(item.id) && /*#__PURE__*/React.createElement("tr", {
+    style: {
+      background: idx % 2 === 0 ? "rgba(139,92,246,0.08)" : "rgba(139,92,246,0.12)",
+      borderBottom: "1px solid rgba(255,255,255,0.05)"
+    }
+  }, /*#__PURE__*/React.createElement("td", {
+    colSpan: fields.length + 2,
+    style: {
+      padding: "0.6rem 0.8rem"
+    }
+  }, /*#__PURE__*/React.createElement("div", {
+    style: {
+      display: "flex",
+      gap: "1.25rem",
+      alignItems: "flex-start",
+      flexWrap: "wrap"
+    }
+  }, /*#__PURE__*/React.createElement(ImageSlot, {
+    slot: 1,
+    path: item.__img1,
+    getImgUrl: getImgUrl,
+    onUpload: f => uploadImage(item.id, 1, f),
+    onDelete: () => deleteImage(item.id, 1)
+  }), /*#__PURE__*/React.createElement(ImageSlot, {
+    slot: 2,
+    path: item.__img2,
+    getImgUrl: getImgUrl,
+    onUpload: f => uploadImage(item.id, 2, f),
+    onDelete: () => deleteImage(item.id, 2)
+  }), /*#__PURE__*/React.createElement("span", {
+    style: {
+      fontSize: "0.7rem",
+      color: "rgba(255,255,255,0.3)",
+      alignSelf: "flex-end",
+      paddingBottom: "0.2rem"
+    }
+  }, "Klick auf Bild zum Vergr\xF6\xDFern")))))), visible.length === 0 && /*#__PURE__*/React.createElement("tr", null, /*#__PURE__*/React.createElement("td", {
+    colSpan: fields.length + 2,
+    style: {
+      padding: "2.5rem",
+      textAlign: "center",
+      color: "rgba(255,255,255,0.35)"
+    }
+  }, filter ? "Keine Treffer für diese Suche" : "Noch leer – ＋ unten rechts drücken")))))), /*#__PURE__*/React.createElement("button", {
+    onClick: addRow,
+    title: "Neue Zeile hinzuf\xFCgen",
+    style: {
+      position: "fixed",
+      bottom: "1.5rem",
+      right: "1.5rem",
+      width: 58,
+      height: 58,
+      borderRadius: "50%",
+      border: "none",
+      background: "linear-gradient(135deg,#10b981,#059669)",
+      color: "white",
+      fontSize: "2rem",
+      cursor: "pointer",
+      boxShadow: "0 4px 24px rgba(0,0,0,0.5)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 100
+    }
+  }, "\uFF0B"));
 }
 
+// ── Root (Auth wrapper) ───────────────────────────────────────────────────
 function Root() {
   const [user, setUser] = useState(null);
   const [checking, setChecking] = useState(true);
   useEffect(() => {
-    sb.auth.getSession().then(({ data }) => { setUser(data.session?.user||null); setChecking(false); });
-    const { data:{ subscription } } = sb.auth.onAuthStateChange((_,session) => { setUser(session?.user||null); });
+    sb.auth.getSession().then(({
+      data
+    }) => {
+      setUser(data.session?.user || null);
+      setChecking(false);
+    });
+    const {
+      data: {
+        subscription
+      }
+    } = sb.auth.onAuthStateChange((_, session) => {
+      setUser(session?.user || null);
+    });
     return () => subscription.unsubscribe();
   }, []);
-  if (checking) return React.createElement("div", { style:{ minHeight:"100vh", background:"linear-gradient(135deg,#1e293b 0%,#581c87 50%,#1e293b 100%)", display:"flex", alignItems:"center", justifyContent:"center", color:"white" } }, "…");
-  return user ? React.createElement(App, { user }) : React.createElement(LoginScreen, null);
+  if (checking) return /*#__PURE__*/React.createElement("div", {
+    style: {
+      minHeight: "100vh",
+      background: "linear-gradient(135deg,#1e293b 0%,#581c87 50%,#1e293b 100%)",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      color: "white"
+    }
+  }, "\u2026");
+  return user ? /*#__PURE__*/React.createElement(App, {
+    user: user
+  }) : /*#__PURE__*/React.createElement(LoginScreen, null);
 }
-
 const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(React.createElement(Root, null));
-  </script>
+root.render(/*#__PURE__*/React.createElement(Root, null));
+
+</script>
 </body>
 </html>
