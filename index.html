@@ -445,6 +445,10 @@ function App({
   const [editIcon, setEditIcon] = useState("");
   const [editFields, setEditFields] = useState([]);
   const [newFieldName, setNewFieldName] = useState("");
+  const [newKeyCount, setNewKeyCount] = useState(1);
+  const [subcatMgr, setSubcatMgr] = useState(false);
+  const [newSubCode, setNewSubCode] = useState("");
+  const [newSubDesc, setNewSubDesc] = useState("");
   const csvRef = useRef(null);
   const flash = (m, ms = 2200) => {
     setMsg(m);
@@ -479,7 +483,9 @@ function App({
             name: c.name,
             icon: c.icon,
             color: c.color,
-            fields: c.fields
+            fields: c.fields,
+            key_count: c.key_count || 1,
+            subcats: c.subcats || []
           };
           dataMap[c.id] = [];
         });
@@ -767,9 +773,15 @@ function App({
       return;
     }
     const fs = newFields.split(",").map(f => f.trim()).filter(Boolean);
-    if (!fs.length) {
-      flash("⚠ Mindestens ein Feld angeben");
-      return;
+    let finalFields;
+    if (newKeyCount === 2) {
+      finalFields = ["Kat", "Key", ...fs.filter(f => f !== "Kat" && f !== "Key")];
+    } else {
+      if (!fs.length) {
+        flash("⚠ Mindestens ein Feld angeben");
+        return;
+      }
+      finalFields = fs;
     }
     const {
       data: created
@@ -778,7 +790,9 @@ function App({
       name,
       icon: newIcon,
       color: newColor,
-      fields: fs
+      fields: finalFields,
+      key_count: newKeyCount,
+      subcats: []
     }]).select();
     if (!created?.length) return;
     const id = created[0].id;
@@ -788,7 +802,9 @@ function App({
         name,
         icon: newIcon,
         color: newColor,
-        fields: fs
+        fields: finalFields,
+        key_count: newKeyCount,
+        subcats: []
       }
     }));
     setData(prev => ({
@@ -798,6 +814,7 @@ function App({
     setNewName("");
     setNewIcon("📁");
     setNewFields("");
+    setNewKeyCount(1);
     setNewColor(PALETTE[3]);
     setAddCatOpen(false);
     flash("✓ Kategorie erstellt");
@@ -829,8 +846,11 @@ function App({
     setNewFieldName("");
   };
   const removeField = (catId, fieldName, idx) => {
-    if (idx === 0) {
-      flash("⚠ Die erste Spalte ist der Schlüssel (ZIP-Export) und kann nicht gelöscht werden");
+    const keyCount = cats[catId]?.key_count || 1;
+    if (idx < keyCount) {
+      flash(keyCount > 1
+        ? "⚠ Die ersten beiden Spalten sind Schlüsselspalten und können nicht gelöscht werden"
+        : "⚠ Die erste Spalte ist der Schlüssel und kann nicht gelöscht werden");
       return;
     }
     const count = (data[catId] || []).filter(r => r[fieldName] && String(r[fieldName]).trim()).length;
@@ -869,11 +889,32 @@ function App({
     setEditingCat(null);
     flash("✓ Kategorie gespeichert");
   };
+  const saveSubcats = async (catId, newSubcats) => {
+    await sb.from("categories").update({ subcats: newSubcats }).eq("id", catId);
+    setCats(prev => ({ ...prev, [catId]: { ...prev[catId], subcats: newSubcats } }));
+  };
+  const addSubcat = () => {
+    const code = newSubCode.trim().toUpperCase().slice(0, 2);
+    const desc = newSubDesc.trim().slice(0, 20);
+    if (!code) { flash("⚠ Code fehlt (max. 2 Zeichen)"); return; }
+    if (!desc) { flash("⚠ Beschreibung fehlt (max. 20 Zeichen)"); return; }
+    const currentSubcats = cats[active]?.subcats || [];
+    if (currentSubcats.some(s => s.code === code)) { flash(`⚠ Code "${code}" gibt es bereits`); return; }
+    saveSubcats(active, [...currentSubcats, { code, desc }]);
+    setNewSubCode(""); setNewSubDesc("");
+  };
+  const deleteSubcat = code => {
+    const count = (data[active] || []).filter(r => r[fields[0]] === code).length;
+    if (count > 0) { flash(`⚠ "${code}" wird noch bei ${count} Eintrag/Einträgen verwendet – zuerst alle ändern`); return; }
+    if (!window.confirm(`Unterkategorie "${code}" löschen?`)) return;
+    saveSubcats(active, (cats[active]?.subcats || []).filter(s => s.code !== code));
+  };
   const goBack = () => {
     setActive(null);
     setFilter("");
     setSortCol(null);
     setExpandedImgs(new Set());
+    setSubcatMgr(false);
   };
   if (loading) return /*#__PURE__*/React.createElement("div", {
     style: {
@@ -1007,14 +1048,14 @@ function App({
     },
       /*#__PURE__*/React.createElement("span", {
         style: { flex: 1, fontSize: "0.85rem", padding: "0.3rem 0.5rem", background: "rgba(255,255,255,0.08)", borderRadius: "6px", color: "white" }
-      }, idx === 0 ? "🔑 " + f : f),
+      }, idx < (cats[id]?.key_count || 1) ? "🔑 " + f : f),
       /*#__PURE__*/React.createElement("button", {
         onClick: () => removeField(id, f, idx),
-        title: idx === 0 ? "Erste Spalte ist der Schlüssel – nicht löschbar" : `Spalte "${f}" löschen`,
+        title: idx < (cats[id]?.key_count || 1) ? "Schlüsselspalte – nicht löschbar" : `Spalte "${f}" löschen`,
         style: {
           background: "transparent", border: "none",
-          color: idx === 0 ? "rgba(255,255,255,0.2)" : "rgba(239,68,68,0.75)",
-          cursor: idx === 0 ? "not-allowed" : "pointer",
+          color: idx < (cats[id]?.key_count || 1) ? "rgba(255,255,255,0.2)" : "rgba(239,68,68,0.75)",
+          cursor: idx < (cats[id]?.key_count || 1) ? "not-allowed" : "pointer",
           fontSize: "1rem", lineHeight: 1, padding: "0.2rem 0.4rem"
         }
       }, "✕")
@@ -1118,12 +1159,24 @@ function App({
   })), /*#__PURE__*/React.createElement("input", {
     value: newFields,
     onChange: e => setNewFields(e.target.value),
-    placeholder: "Felder (kommagetrennt): Feld1, Feld2, Feld3",
+    placeholder: newKeyCount === 2
+      ? "Weitere Felder (kommagetrennt): Autor, Jahr, …  (optional)"
+      : "Felder (kommagetrennt): Feld1, Feld2, Feld3",
     style: inp({
       width: "100%",
       marginBottom: "0.5rem"
     })
-  }), /*#__PURE__*/React.createElement("div", {
+  }), React.createElement("label", {
+    style: { display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.5rem", fontSize: "0.85rem", cursor: "pointer", color: "rgba(255,255,255,0.8)" }
+  },
+    React.createElement("input", {
+      type: "checkbox",
+      checked: newKeyCount === 2,
+      onChange: e => setNewKeyCount(e.target.checked ? 2 : 1),
+      style: { cursor: "pointer" }
+    }),
+    "Mit Unterkategorien (erste Spalten: 'Kat' + 'Key', beide gesch\xFCtzt)"
+  ), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: "6px",
@@ -1262,7 +1315,57 @@ function App({
       color: "rgba(255,255,255,0.45)",
       marginLeft: "0.25rem"
     }
-  }, visible.length, " / ", rows.length)), /*#__PURE__*/React.createElement("div", {
+  }, visible.length, " / ", rows.length)),
+  cat.key_count === 2 && React.createElement("div", {
+    style: { display: "flex", alignItems: "center", gap: "0.6rem", flexWrap: "wrap", background: "rgba(0,0,0,0.25)", borderRadius: "8px", padding: "0.4rem 0.75rem", marginBottom: "0.5rem" }
+  },
+    (cat.subcats || []).length === 0
+      ? React.createElement("span", { style: { fontSize: "0.8rem", color: "rgba(255,255,255,0.4)" } }, "Noch keine Unterkategorien definiert")
+      : (cat.subcats || []).map(s => React.createElement("span", {
+          key: s.code,
+          style: { fontSize: "0.8rem", color: "rgba(255,255,255,0.75)" }
+        }, React.createElement("strong", { style: { color: "#a78bfa" } }, s.code), " ", s.desc)),
+    React.createElement("button", {
+      onClick: () => setSubcatMgr(m => !m),
+      style: { marginLeft: "auto", background: "transparent", border: "1px solid rgba(255,255,255,0.2)", borderRadius: "6px", color: "rgba(255,255,255,0.6)", cursor: "pointer", fontSize: "0.75rem", padding: "0.2rem 0.5rem" }
+    }, subcatMgr ? "✕ Schlie\xDFen" : "⚙ Verwalten")
+  ),
+  cat.key_count === 2 && subcatMgr && React.createElement("div", {
+    style: { background: "rgba(0,0,0,0.35)", borderRadius: "10px", padding: "0.75rem", marginBottom: "0.75rem" }
+  },
+    (cat.subcats || []).map(s => React.createElement("div", {
+      key: s.code,
+      style: { display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.35rem" }
+    },
+      React.createElement("span", { style: { fontWeight: "700", fontSize: "0.9rem", minWidth: 28, color: "#a78bfa" } }, s.code),
+      React.createElement("span", { style: { flex: 1, fontSize: "0.85rem", color: "rgba(255,255,255,0.75)" } }, s.desc),
+      React.createElement("button", {
+        onClick: () => deleteSubcat(s.code),
+        title: `"${s.code}" l\xF6schen`,
+        style: { background: "transparent", border: "none", color: "rgba(239,68,68,0.7)", cursor: "pointer", fontSize: "1rem", padding: "0.1rem 0.3rem" }
+      }, "✕")
+    )),
+    React.createElement("div", { style: { display: "flex", gap: "0.4rem", marginTop: "0.5rem", flexWrap: "wrap" } },
+      React.createElement("input", {
+        value: newSubCode,
+        onChange: e => setNewSubCode(e.target.value.slice(0, 2)),
+        placeholder: "Code",
+        maxLength: 2,
+        style: inp({ width: 56, textAlign: "center", fontWeight: "700", fontSize: "0.9rem" })
+      }),
+      React.createElement("input", {
+        value: newSubDesc,
+        onChange: e => setNewSubDesc(e.target.value.slice(0, 20)),
+        placeholder: "Beschreibung (max. 20 Zeichen)",
+        style: inp({ flex: 1 })
+      }),
+      React.createElement("button", {
+        onClick: addSubcat,
+        style: btn("linear-gradient(135deg,#a855f7,#6366f1)", { padding: "0.4rem 0.8rem" })
+      }, "＋ Hinzuf\xFCgen")
+    )
+  ),
+  /*#__PURE__*/React.createElement("div", {
     style: {
       overflowX: "auto"
     }
@@ -1308,19 +1411,29 @@ function App({
       background: idx % 2 === 0 ? "rgba(255,255,255,0.03)" : "rgba(255,255,255,0.065)",
       borderBottom: expandedImgs.has(item.id) ? "none" : "1px solid rgba(255,255,255,0.05)"
     }
-  }, fields.map(f => /*#__PURE__*/React.createElement("td", {
+  }, fields.map((f, fIdx) => /*#__PURE__*/React.createElement("td", {
     key: f,
     style: {
       padding: "0.2rem 0.35rem"
     }
-  }, /*#__PURE__*/React.createElement("textarea", {
-    value: item[f] || "",
-    onChange: e => { cellChange(item.id, f, e.target.value); e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; },
-    onFocus: e => { e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; e.target.style.resize = "vertical"; e.target.style.overflow = "auto"; },
-    onBlur: e => { saveCell(item.id, f, e.target.value); e.target.style.height = ""; e.target.style.resize = "none"; e.target.style.overflow = "hidden"; },
-    rows: 1,
-    style: { ...inp({ width: "100%", minWidth: 70, padding: "0.35rem 0.45rem" }), resize: "none", overflow: "hidden", lineHeight: "1.4", fontFamily: "inherit" }
-  }))), /*#__PURE__*/React.createElement("td", {
+  }, cat.key_count === 2 && fIdx === 0
+    ? React.createElement("select", {
+        value: item[f] || "",
+        onChange: e => { cellChange(item.id, f, e.target.value); saveCell(item.id, f, e.target.value); },
+        style: { ...inp({ width: "100%", minWidth: 60 }), cursor: "pointer" }
+      },
+      React.createElement("option", { value: "" }, "—"),
+      (cat.subcats || []).map(s => React.createElement("option", { key: s.code, value: s.code }, s.code + " – " + s.desc))
+    )
+    : /*#__PURE__*/React.createElement("textarea", {
+        value: item[f] || "",
+        onChange: e => { cellChange(item.id, f, e.target.value); e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; },
+        onFocus: e => { e.target.style.height = "auto"; e.target.style.height = e.target.scrollHeight + "px"; e.target.style.resize = "vertical"; e.target.style.overflow = "auto"; },
+        onBlur: e => { saveCell(item.id, f, e.target.value); e.target.style.height = ""; e.target.style.resize = "none"; e.target.style.overflow = "hidden"; },
+        rows: 1,
+        style: { ...inp({ width: "100%", minWidth: 70, padding: "0.35rem 0.45rem" }), resize: "none", overflow: "hidden", lineHeight: "1.4", fontFamily: "inherit" }
+      })
+  )), /*#__PURE__*/React.createElement("td", {
     style: {
       padding: "0.2rem 0.25rem",
       textAlign: "center"
