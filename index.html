@@ -443,6 +443,8 @@ function App({
   const [editingCat, setEditingCat] = useState(null);
   const [editName, setEditName] = useState("");
   const [editIcon, setEditIcon] = useState("");
+  const [editFields, setEditFields] = useState([]);
+  const [newFieldName, setNewFieldName] = useState("");
   const csvRef = useRef(null);
   const flash = (m, ms = 2200) => {
     setMsg(m);
@@ -823,21 +825,45 @@ function App({
     setEditingCat(id);
     setEditName(cats[id].name);
     setEditIcon(cats[id].icon);
+    setEditFields([...cats[id].fields]);
+    setNewFieldName("");
+  };
+  const removeField = (catId, fieldName, idx) => {
+    if (idx === 0) {
+      flash("⚠ Die erste Spalte ist der Schlüssel (ZIP-Export) und kann nicht gelöscht werden");
+      return;
+    }
+    const count = (data[catId] || []).filter(r => r[fieldName] && String(r[fieldName]).trim()).length;
+    const msg = count > 0
+      ? `Spalte "${fieldName}" löschen?\nSie enthält bei ${count} Eintrag/Einträgen Daten – diese werden ausgeblendet, aber nicht endgültig gelöscht.`
+      : `Spalte "${fieldName}" wirklich löschen?`;
+    if (!window.confirm(msg)) return;
+    setEditFields(prev => prev.filter(f => f !== fieldName));
+  };
+  const addField = () => {
+    const name = newFieldName.trim();
+    if (!name) { flash("⚠ Bitte einen Spaltennamen eingeben"); return; }
+    if (editFields.includes(name)) { flash(`⚠ Spalte "${name}" gibt es bereits`); return; }
+    setEditFields(prev => [...prev, name]);
+    setNewFieldName("");
   };
   const saveCategory = async id => {
     const name = editName.trim();
     if (!name) return;
     const icon = editIcon.trim() || cats[id].icon;
+    if (!editFields.length) { flash("⚠ Mindestens eine Spalte erforderlich"); return; }
     await sb.from("categories").update({
       name,
-      icon
+      icon,
+      fields: editFields
     }).eq("id", id);
     setCats(prev => ({
       ...prev,
       [id]: {
         ...prev[id],
         name,
-        icon
+        icon,
+        fields: editFields
       }
     }));
     setEditingCat(null);
@@ -970,6 +996,45 @@ function App({
       flex: 1
     })
   })), /*#__PURE__*/React.createElement("div", {
+    style: { marginBottom: "0.5rem" }
+  },
+    /*#__PURE__*/React.createElement("div", {
+      style: { fontSize: "0.75rem", color: "rgba(255,255,255,0.45)", marginBottom: "0.35rem" }
+    }, "Spalten"),
+    editFields.map((f, idx) => /*#__PURE__*/React.createElement("div", {
+      key: f,
+      style: { display: "flex", alignItems: "center", gap: "0.4rem", marginBottom: "0.3rem" }
+    },
+      /*#__PURE__*/React.createElement("span", {
+        style: { flex: 1, fontSize: "0.85rem", padding: "0.3rem 0.5rem", background: "rgba(255,255,255,0.08)", borderRadius: "6px", color: "white" }
+      }, idx === 0 ? "🔑 " + f : f),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: () => removeField(id, f, idx),
+        title: idx === 0 ? "Erste Spalte ist der Schlüssel – nicht löschbar" : `Spalte "${f}" löschen`,
+        style: {
+          background: "transparent", border: "none",
+          color: idx === 0 ? "rgba(255,255,255,0.2)" : "rgba(239,68,68,0.75)",
+          cursor: idx === 0 ? "not-allowed" : "pointer",
+          fontSize: "1rem", lineHeight: 1, padding: "0.2rem 0.4rem"
+        }
+      }, "✕")
+    )),
+    /*#__PURE__*/React.createElement("div", {
+      style: { display: "flex", gap: "0.4rem", marginTop: "0.4rem" }
+    },
+      /*#__PURE__*/React.createElement("input", {
+        value: newFieldName,
+        onChange: e => setNewFieldName(e.target.value),
+        onKeyDown: e => e.key === "Enter" && addField(),
+        placeholder: "Neue Spalte…",
+        style: inp({ flex: 1, fontSize: "0.85rem", padding: "0.3rem 0.5rem" })
+      }),
+      /*#__PURE__*/React.createElement("button", {
+        onClick: addField,
+        style: btn("linear-gradient(135deg,#a855f7,#6366f1)", { padding: "0.3rem 0.75rem" })
+      }, "＋")
+    )
+  ), /*#__PURE__*/React.createElement("div", {
     style: {
       display: "flex",
       gap: "0.5rem"
