@@ -775,7 +775,7 @@ function App({
     const fs = newFields.split(",").map(f => f.trim()).filter(Boolean);
     let finalFields;
     if (newKeyCount === 2) {
-      finalFields = ["Kat", "Key", ...fs.filter(f => f !== "Kat" && f !== "Key")];
+      finalFields = ["Kat", "Bezeichnung", ...fs.filter(f => f !== "Kat" && f !== "Bezeichnung")];
     } else {
       if (!fs.length) {
         flash("⚠ Mindestens ein Feld angeben");
